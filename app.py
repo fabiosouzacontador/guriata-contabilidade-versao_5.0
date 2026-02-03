@@ -1,403 +1,594 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import date
-from sqlmodel import select, desc
+from sqlmodel import SQLModel, Field, select, desc, text, create_engine, Session
+from sqlalchemy.exc import IntegrityError
+from typing import Optional
+# CORREÇÃO LINHA 8: Removida a biblioteca externa para evitar erros
+# from streamlit_option_menu import option_menu 
+import warnings
 import time
-import streamlit.components.v1 as components
 
-# --- CONFIGURAÇÕES DO PROJETO ---
-VERSAO_SISTEMA = "1.0.7" # Versão atualizada com melhoria de contraste
-ANO_COPYRIGHT = "2025"
-NOME_INSTITUICAO = "Guriatã Tecnologia Educacional"
+# ==============================================================================
+# 1. CONFIGURAÇÕES & DESIGN (CORREÇÃO DE ALINHAMENTO)
+# ==============================================================================
+warnings.filterwarnings("ignore")
+st.set_page_config(page_title="Guriatã Contabilidade", layout="wide", page_icon="🦅")
 
-# --- Importações Internas ---
-try:
-    from src.database import (
-        create_db_and_tables, populate_initial_data, get_session, salvar_lancamento, 
-        limpar_todos_lancamentos, deletar_usuario_por_id, limpar_lancamentos_por_usuario,
-        excluir_lancamento_individual, alterar_senha_usuario
-    )
-    from src.models.account_model import ContaContabil
-    from src.models.lancamento_model import Lancamento
-    from src.models.usuario_model import Usuario
-    from src.controllers.balancete_controller import gerar_balancete
-    from src.controllers.dre_controller import gerar_relatorio_dre
-    from src.controllers.balanco_controller import gerar_dados_balanco
-    from src.controllers.razonete_controller import obter_dados_razonetes
-except ImportError:
-    # Fallback para caso a estrutura de pastas seja diferente localmente
-    from database import (
-        create_db_and_tables, populate_initial_data, get_session, salvar_lancamento, 
-        limpar_todos_lancamentos, deletar_usuario_por_id, limpar_lancamentos_por_usuario,
-        excluir_lancamento_individual, alterar_senha_usuario
-    )
-    from models.account_model import ContaContabil
-    from models.lancamento_model import Lancamento
-    from models.usuario_model import Usuario
-    from controllers.balancete_controller import gerar_balancete
-    from controllers.dre_controller import gerar_relatorio_dre
-    from controllers.balanco_controller import gerar_dados_balanco
-    from controllers.razonete_controller import obter_dados_razonetes
-
-# --- Configuração Inicial ---
-st.set_page_config(page_title="Guriatã - Gestão Contábil", layout="wide", page_icon="assets/logo.png")
-create_db_and_tables()
-populate_initial_data()
-
-# --- CSS GLOBAL (AJUSTADO PARA CONTRASTE E ESPAÇAMENTO) ---
-st.markdown(f"""
+st.markdown("""
 <style>
-    /* 1. Ajustes de Layout (Espaçamento) */
-    .block-container {{
-        padding-top: 1.5rem; 
-        padding-bottom: 2rem; 
-        max-width: 100%;
-    }}
+    /* FONTE UNIFICADA */
+    html, body, [class*="css"], .stDataFrame, .kpi-val, .razonete-body, .col-debito, .col-credito {
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+    }
+
+    /* Layout Geral */
+    .block-container { padding-top: 2rem !important; padding-bottom: 3rem !important; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
     
-    div[data-testid="stVerticalBlock"] > div {{
-        gap: 0.5rem;
-    }}
-
-    /* 2. MELHORIA DE CONTRASTE DOS CAMPOS (INPUTS) */
-    /* Afeta: Texto, Número, Data */
-    .stTextInput > div > div, 
-    .stNumberInput > div > div, 
-    .stDateInput > div > div {{
-        background-color: #ffffff !important; /* Fundo Branco */
-        border: 1px solid #a0a0a0 !important; /* Borda Cinza Visível */
-        color: #000000 !important;
-        border-radius: 5px;
-    }}
+    /* Inputs Modernos */
+    .stTextInput>div>div, .stSelectbox>div>div, .stNumberInput>div>div, .stDateInput>div>div, .stTextArea>div>div { 
+        border-radius: 8px; border: 1px solid #e0e0e0;
+    }
     
-    /* Afeta: Caixas de Seleção (Selectbox) */
-    div[data-baseweb="select"] > div {{
-        background-color: #ffffff !important;
-        border: 1px solid #a0a0a0 !important;
-        color: #000000 !important;
-        border-radius: 5px;
-    }}
-
-    /* 3. Estilos da Logo e Sidebar */
-    div[data-testid="stImage"] {{display: flex; justify-content: flex-end; align-items: center; padding-right: 20px;}}
-    [data-testid="stSidebar"] div[data-testid="stImage"] {{justify-content: center; padding-right: 0px;}}
-
-    /* 4. Estilos dos Razonetes */
-    .razonete-container {{border: 1px solid #ddd; border-radius: 5px; padding: 10px; background-color: #ffffff; margin-bottom: 20px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); page-break-inside: avoid;}}
-    .razonete-header {{text-align: center; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px; margin-bottom: 5px; color: #333; font-size: 1.1em;}}
-    .razonete-body {{display: flex; min-height: 100px;}}
-    .col-debito {{width: 50%; border-right: 2px solid #333; text-align: right; padding-right: 10px; color: #d63031;}}
-    .col-credito {{width: 50%; text-align: left; padding-left: 10px; color: #0984e3;}}
-    .razonete-footer {{border-top: 1px solid #aaa; margin-top: 5px; padding-top: 5px; display: flex; font-weight: bold; font-size: 0.9em;}}
+    /* Cards KPI */
+    .kpi-card { 
+        background: white; 
+        border: 1px solid #f0f0f0;
+        border-left: 4px solid #004b8d; 
+        padding: 20px; 
+        border-radius: 10px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
+        text-align: center; 
+        height: 100%; 
+    }
+    .kpi-title { font-size: 0.8rem; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .kpi-val { font-size: 1.8rem; font-weight: 700; color: #2c3e50; margin-top: 8px; }
     
-    .footer-text {{font-size: 0.8em; color: gray; text-align: center; margin-top: 20px;}}
+    /* Tabelas */
+    .stDataFrame { border: 1px solid #f0f0f0; border-radius: 8px; overflow: hidden; }
+    
+    /* Razonetes */
+    .razonete-container { 
+        background: white; border: 1px solid #e0e0e0; border-radius: 8px; 
+        margin-bottom: 20px; overflow: hidden; page-break-inside: avoid; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .razonete-header { 
+        text-align: center; font-weight: 600; font-size: 0.95em; 
+        color: white; background-color: #004b8d; padding: 10px; 
+    }
+    .razonete-body { display: flex; min-height: 120px; font-size: 1.1em; font-weight: 500; }
+    .col-debito { width: 50%; border-right: 1px solid #ddd; text-align: right; padding: 12px; color: #c0392b; }
+    .col-credito { width: 50%; text-align: left; padding: 12px; color: #27ae60; }
+    
+    /* Cabeçalhos */
+    .report-header { 
+        background-color: #f8f9fa; color: #004b8d; 
+        padding: 12px; border-radius: 8px; text-align: center; 
+        font-weight: 700; margin-bottom: 15px; border: 1px solid #e9ecef;
+    }
 
-    /* 5. Modo Impressão */
-    @media print {{
-        [data-testid="stSidebar"], header, footer, .stButton, .stTextInput, .stSelectbox, .stDateInput, .stNumberInput, button[title="View fullscreen"], .stDeployButton, [data-testid="stExpander"] {{
-            display: none !important;
-        }}
-        .block-container, [data-testid="stAppViewContainer"] {{
-            background-color: white !important; padding: 0 !important; margin: 0 !important;
-        }}
-        body, h1, h2, h3, h4, p, div {{
-            color: black !important; -webkit-print-color-adjust: exact;
-        }}
-        .razonete-container {{
-            break-inside: avoid; border: 1px solid #000 !important;
-        }}
-    }}
+    /* Impressão */
+    @media print {
+        [data-testid="stSidebar"] { display: none; }
+        .stButton, .stForm, .stSelectbox, .stTextInput, .stNumberInput, .stDateInput, .stTextArea { display: none !important; }
+        .imprimir-btn { display: none !important; }
+        .block-container { padding-top: 0 !important; }
+        .stDataFrame, .razonete-container { display: block !important; width: 100% !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FUNÇÕES AUXILIARES ---
 def botao_imprimir():
-    components.html(
-        """<script>function printPage(){window.parent.print();}</script>
-        <div style="display: flex; justify-content: center; margin-top: 20px;">
-            <button onclick="printPage()" style="background-color: #004b8d; color: white; border: none; padding: 10px 24px; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px;">🖨️ Imprimir Relatório</button>
-        </div>""", height=70
-    )
+    st.markdown("""<div style="text-align: center; margin-top: 30px; margin-bottom: 30px;"><button onclick="window.print()" class="imprimir-btn" style="background-color:#004b8d; color:white; padding:10px 24px; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:14px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">🖨️ Imprimir Relatório</button></div>""", unsafe_allow_html=True)
 
-def rodape_institucional():
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"""<div class='footer-text'><b>{NOME_INSTITUICAO}</b><br>Versão {VERSAO_SISTEMA}<br>© {ANO_COPYRIGHT} Todos os direitos reservados.</div>""", unsafe_allow_html=True)
+# ==============================================================================
+# 2. BANCO DE DADOS & PLANO DE CONTAS MASTER
+# ==============================================================================
+sqlite_file_name = "database.db"
+engine = create_engine(f"sqlite:///{sqlite_file_name}", connect_args={"check_same_thread": False})
 
-# --- LOGIN ---
-if "usuario_logado" not in st.session_state: st.session_state["usuario_logado"] = None
+class Escola(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    cidade: str
 
-def verificar_credenciais():
+class Turma(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str
+    ano_letivo: str
+    professor_id: int
+    escola_id: int
+
+class Usuario(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str
+    senha: str
+    nome: str
+    perfil: str
+    termos_aceitos: bool = Field(default=False)
+    criado_por_id: Optional[int] = Field(default=None)
+    escola_id: Optional[int] = Field(default=None)
+    turma_id: Optional[int] = Field(default=None)
+    xp: int = Field(default=0)
+    data_criacao: date = Field(default_factory=date.today)
+
+class Aula(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    titulo: str
+    descricao: str
+    arquivo_blob: Optional[bytes] = None
+    nome_arquivo: Optional[str] = None
+    professor_id: int
+    turma_id: int
+    data_postagem: date = Field(default_factory=date.today)
+
+class ContaContabil(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    codigo: str
+    nome: str
+    tipo: str
+    natureza: str
+
+class Lancamento(SQLModel, table=True):
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    data_lancamento: date
+    conta_debito: str
+    conta_credito: str
+    valor: float
+    historico: str
+    usuario_id: int = Field(foreign_key="usuario.id")
+
+def get_session(): return Session(engine)
+
+def inicializar_banco():
+    SQLModel.metadata.create_all(engine)
     session = get_session()
-    usuario_input = st.session_state.get("login_user")
-    senha_input = st.session_state.get("login_pass")
-    statement = select(Usuario).where(Usuario.username == usuario_input).where(Usuario.senha == senha_input)
-    result = session.exec(statement).first()
-    if result:
-        st.session_state["usuario_logado"] = result
-        st.success(f"Bem-vindo(a), {result.nome}!")
-        time.sleep(0.5)
-        st.rerun()
-    else: st.error("Usuário ou senha incorretos.")
+    
+    cols = {"usuario": ["escola_id INTEGER", "turma_id INTEGER", "xp INTEGER", "data_criacao DATE"], "turma": ["escola_id INTEGER"]}
+    for tab, cs in cols.items():
+        for c in cs:
+            try: session.exec(text(f"ALTER TABLE {tab} ADD COLUMN {c}")); session.commit()
+            except: pass
 
-def realizar_logout(): st.session_state["usuario_logado"] = None; st.rerun()
+    if not session.exec(select(Usuario).where(Usuario.username=="admin")).first():
+        esc = Escola(nome="Sede Administrativa", cidade="Matriz")
+        session.add(esc); session.commit()
+        session.add(Usuario(username="admin", senha="123", nome="Administrador Geral", perfil="admin", termos_aceitos=True, escola_id=esc.id))
+        session.commit()
+    
+    # PLANO DE CONTAS MASTER
+    if not session.exec(select(ContaContabil)).first():
+        contas = [
+            ("1", "ATIVO", "S", "D"), ("1.1", "CIRCULANTE", "S", "D"),
+            ("1.1.1", "Caixa Geral", "A", "D"), ("1.1.2", "Bancos Conta Movimento", "A", "D"),
+            ("1.1.3", "Aplicações Financeiras", "A", "D"), ("1.1.4", "Clientes", "A", "D"),
+            ("1.1.5", "Estoques", "A", "D"), ("1.1.6", "Impostos a Recuperar", "A", "D"),
+            ("1.2", "NÃO CIRCULANTE", "S", "D"), ("1.2.1", "Realizável LP", "S", "D"),
+            ("1.2.3", "Imobilizado", "S", "D"), ("1.2.3.1", "Imóveis", "A", "D"),
+            ("1.2.3.2", "Veículos", "A", "D"), ("1.2.3.3", "Móveis e Utensílios", "A", "D"),
+            ("1.2.3.4", "Equip. Informática", "A", "D"), ("1.2.4", "Intangível", "A", "D"),
+            ("2", "PASSIVO", "S", "C"), ("2.1", "CIRCULANTE", "S", "C"),
+            ("2.1.1", "Fornecedores", "A", "C"), ("2.1.2", "Salários a Pagar", "A", "C"),
+            ("2.1.3", "Obrigações Sociais", "A", "C"), ("2.1.4", "Impostos a Recolher", "A", "C"),
+            ("2.2", "NÃO CIRCULANTE", "S", "C"), ("2.2.1", "Financiamentos LP", "A", "C"),
+            ("2.3", "PATRIMÔNIO LÍQUIDO", "S", "C"), ("2.3.1", "Capital Social", "A", "C"),
+            ("2.3.2", "Reservas de Lucros", "A", "C"), ("2.3.3", "Lucros Acumulados", "A", "C"),
+            ("3", "RECEITAS", "S", "C"), ("3.1", "RECEITA BRUTA", "S", "C"),
+            ("3.1.1", "Venda de Mercadorias", "A", "C"), ("3.1.2", "Serviços", "A", "C"),
+            ("3.2", "DEDUÇÕES", "S", "D"), ("3.2.1", "Devoluções", "A", "D"),
+            ("3.2.2", "Impostos s/ Vendas", "A", "D"),
+            ("3.3", "RECEITAS FINANCEIRAS", "S", "C"), ("3.3.1", "Juros Ativos", "A", "C"),
+            ("4", "CUSTOS", "S", "D"), ("4.1", "CUSTOS OPERACIONAIS", "S", "D"),
+            ("4.1.1", "CMV", "A", "D"), ("4.1.2", "CSP", "A", "D"),
+            ("5", "DESPESAS", "S", "D"), ("5.1", "DESPESAS COM PESSOAL", "S", "D"),
+            ("5.1.1", "Salários", "A", "D"), ("5.1.2", "Pró-Labore", "A", "D"),
+            ("5.2", "ADMINISTRATIVAS", "S", "D"), ("5.2.1", "Aluguel", "A", "D"),
+            ("5.2.2", "Energia", "A", "D"), ("5.2.3", "Água", "A", "D"),
+            ("5.2.4", "Internet", "A", "D"), ("5.2.5", "Material Escritório", "A", "D"),
+            ("5.2.6", "Manutenção", "A", "D"), ("5.2.7", "Publicidade", "A", "D"),
+            ("6", "RESULTADO FINANCEIRO", "S", "D"), ("6.1", "DESPESAS FINANCEIRAS", "S", "D"),
+            ("6.1.1", "Juros Passivos", "A", "D"), ("6.1.2", "Tarifas Bancárias", "A", "D")
+        ]
+        for c, n, t, nat in contas: session.add(ContaContabil(codigo=c, nome=n, tipo=t, natureza=nat))
+        session.commit()
 
-# --- FUNÇÕES DE CADASTRO COM LIMPEZA DE CAMPOS ---
-def callback_criar_usuario():
-    u = st.session_state.get("k_new_user", "")
-    p = st.session_state.get("k_new_pass", "")
-    n = st.session_state.get("k_new_name", "")
-    perf = st.session_state.get("k_new_perf", "aluno")
+inicializar_banco()
 
-    if n and u and p:
-        session = get_session()
-        if session.exec(select(Usuario).where(Usuario.username == u)).first():
-             st.toast("⚠️ Usuário já existe!", icon="⚠️")
-        else:
-            session.add(Usuario(username=u, senha=p, nome=n, perfil=perf))
-            session.commit()
-            st.toast(f"✅ Usuário {n} criado com sucesso!", icon="✅")
-            st.session_state["k_new_user"] = ""
-            st.session_state["k_new_pass"] = ""
-            st.session_state["k_new_name"] = ""
+# ==============================================================================
+# 3. LÓGICA CONTÁBIL
+# ==============================================================================
+def fmt_moeda(v):
+    # R$ X.XXX,XX
+    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def get_mapa_nomes():
+    return {c.codigo: c.nome for c in get_session().exec(select(ContaContabil)).all()}
+
+def get_contas_analiticas():
+    return {c.codigo: f"{c.codigo} - {c.nome}" for c in get_session().exec(select(ContaContabil).where(ContaContabil.tipo == 'A')).all()}
+
+def calcular_movimentacao(uid):
+    s = get_session()
+    lancs = s.exec(select(Lancamento).where(Lancamento.usuario_id == uid)).all()
+    dados = {}
+    mapa_nat = {c.codigo: c.natureza for c in s.exec(select(ContaContabil)).all()}
+    mapa_nome = {c.codigo: c.nome for c in s.exec(select(ContaContabil)).all()}
+    
+    for l in lancs:
+        if l.conta_debito not in dados: dados[l.conta_debito] = {'deb': 0.0, 'cred': 0.0}
+        dados[l.conta_debito]['deb'] += l.valor
+        if l.conta_credito not in dados: dados[l.conta_credito] = {'deb': 0.0, 'cred': 0.0}
+        dados[l.conta_credito]['cred'] += l.valor
+        
+    resultado = {}
+    for k, v in dados.items():
+        nat = mapa_nat.get(k, 'D')
+        saldo = v['deb'] - v['cred'] if nat == 'D' else v['cred'] - v['deb']
+        resultado[k] = {
+            'nome': mapa_nome.get(k, k),
+            'natureza': nat,
+            'total_debito': v['deb'],
+            'total_credito': v['cred'],
+            'saldo': saldo
+        }
+    return resultado
+
+def gerar_demonstrativos(uid):
+    mov = calcular_movimentacao(uid)
+    lista_balanco = []
+    
+    rec_bruta = 0.0; deducoes = 0.0; custos = 0.0; despesas_op = 0.0; rec_financ = 0.0; desp_financ = 0.0
+    ativo_total = 0.0; passivo_total = 0.0
+    
+    for conta, d in mov.items():
+        saldo = d['saldo']
+        if conta.startswith('3.1'): rec_bruta += saldo
+        elif conta.startswith('3.2'): deducoes += saldo
+        elif conta.startswith('3.3'): rec_financ += saldo
+        elif conta.startswith('4'): custos += saldo
+        elif conta.startswith('5'): despesas_op += saldo
+        elif conta.startswith('6.1'): desp_financ += saldo
+        elif conta.startswith('1'):
+            ativo_total += saldo
+            lista_balanco.append({"Conta": f"{conta} - {d['nome']}", "Saldo": saldo, "Grupo": "1"})
+        elif conta.startswith('2'):
+            passivo_total += saldo
+            lista_balanco.append({"Conta": f"{conta} - {d['nome']}", "Saldo": saldo, "Grupo": "2"})
+
+    rec_liquida = rec_bruta - deducoes
+    lucro_bruto = rec_liquida - custos
+    res_operacional = lucro_bruto - despesas_op
+    res_liquido = res_operacional + rec_financ - desp_financ
+    
+    if res_liquido != 0:
+        passivo_total += res_liquido
+        lista_balanco.append({"Conta": "Resultado do Exercício", "Saldo": res_liquido, "Grupo": "2"})
+    
+    dre_rows = [
+        {"Descrição": "(=) Receita Operacional Bruta", "Valor": fmt_moeda(rec_bruta)},
+        {"Descrição": "(-) Deduções da Receita", "Valor": fmt_moeda(deducoes * -1)},
+        {"Descrição": "(=) Receita Operacional Líquida", "Valor": fmt_moeda(rec_liquida)},
+        {"Descrição": "(-) Custos (CMV/CSP)", "Valor": fmt_moeda(custos * -1)},
+        {"Descrição": "(=) Lucro Bruto", "Valor": fmt_moeda(lucro_bruto)},
+        {"Descrição": "(-) Despesas Operacionais", "Valor": fmt_moeda(despesas_op * -1)},
+        {"Descrição": "(+) Receitas Financeiras", "Valor": fmt_moeda(rec_financ)},
+        {"Descrição": "(-) Despesas Financeiras", "Valor": fmt_moeda(desp_financ * -1)},
+        {"Descrição": "(=) Resultado Líquido do Exercício", "Valor": fmt_moeda(res_liquido)}
+    ]
+    df_dre = pd.DataFrame(dre_rows)
+
+    df_geral = pd.DataFrame(lista_balanco)
+    if not df_geral.empty:
+        df_a = df_geral[df_geral["Grupo"] == "1"].copy()
+        df_p = df_geral[df_geral["Grupo"] == "2"].copy()
     else:
-        st.toast("⚠️ Preencha todos os campos.", icon="⚠️")
+        df_a = pd.DataFrame(columns=["Conta", "Saldo"])
+        df_p = pd.DataFrame(columns=["Conta", "Saldo"])
+        
+    return ativo_total, passivo_total, rec_bruta, res_liquido, df_a, df_p, df_dre
 
-if not st.session_state["usuario_logado"]:
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col_logo, col_form = st.columns([1, 1], gap="small", vertical_alignment="center")
-    with col_logo: st.image("assets/logo.png", width=350)
-    with col_form:
-        st.markdown("### Acesso ao Sistema")
-        with st.form("form_login"):
-            st.text_input("Usuário", key="login_user")
-            st.text_input("Senha", type="password", key="login_pass")
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.form_submit_button("Entrar", type="primary", use_container_width=True): verificar_credenciais()
-        st.markdown(f"<div style='text-align:center; margin-top:20px; color:gray; font-size:0.8em;'>© {ANO_COPYRIGHT} {NOME_INSTITUICAO}</div>", unsafe_allow_html=True)
+# ==============================================================================
+# 4. LOGIN (LOGO 100% CENTRALIZADA)
+# ==============================================================================
+def login():
+    s = get_session()
+    u = st.session_state.get("u_log", "").strip()
+    p = st.session_state.get("u_pass", "").strip()
+    user = s.exec(select(Usuario).where(Usuario.username==u).where(Usuario.senha==p)).first()
+    if user: st.session_state["user"] = user; st.rerun()
+    else: st.error("Dados incorretos.")
+
+def logout(): st.session_state["user"] = None; st.rerun()
+
+if "user" not in st.session_state or not st.session_state["user"]:
+    st.write(""); st.write("")
+    # COLUNAS ESTRATÉGICAS [5, 3, 5] PARA FORÇAR O MEIO
+    c1, c2, c3 = st.columns([5, 3, 5])
+    with c2:
+        # LOGO DENTRO DE COLUNAS ANINHADAS PARA GARANTIR CENTRO
+        i1, i2, i3 = st.columns([1, 2, 1])
+        with i2:
+            try: st.image("assets/logo.png", width=140) 
+            except: pass
+        
+        with st.form("login_form", clear_on_submit=True):
+            st.text_input("Usuário", key="u_log", placeholder="Usuario")
+            st.text_input("Senha", type="password", key="u_pass", placeholder="Senha")
+            st.write("") 
+            if st.form_submit_button("ENTRAR", type="primary", use_container_width=True): login()
+        st.markdown("<div style='text-align: center; color: #bbb; font-size: 0.7em; margin-top: 25px;'>© 2026 Guriatã Educacional</div>", unsafe_allow_html=True)
     st.stop()
 
-# --- SISTEMA LOGADO ---
-usuario_atual = st.session_state["usuario_logado"]
 session = get_session()
-perfil = usuario_atual.perfil
+try: me = session.get(Usuario, st.session_state["user"].id)
+except: logout(); st.stop()
 
-if perfil == 'admin': filtro_id = None; aviso_modo = "👁️ Modo Visão Geral (Todos os Lançamentos)"
-else: filtro_id = usuario_atual.id; aviso_modo = "🔒 Modo Individual (Seus Lançamentos)"
+if not me.termos_aceitos:
+    st.write(""); st.write("")
+    c1, c2, c3 = st.columns([1, 4, 1])
+    with c2:
+        st.info("⚠️ SISTEMA DIDÁTICO: Proibido inserir dados reais. Use apenas dados fictícios.")
+        if st.button("✅ Li e Concordo", type="primary", use_container_width=True): me.termos_aceitos=True; session.add(me); session.commit(); st.rerun()
+    st.stop()
 
+# ==============================================================================
+# 5. MENU (CORRIGIDO: MENU NATIVO)
+# ==============================================================================
 with st.sidebar:
-    st.image("assets/logo.png", width=180)
-    st.divider()
-    st.write(f"👤 **{usuario_atual.nome}**")
-    st.caption(f"Perfil: {perfil.upper()}")
-    if st.button("Sair (Logout)"): realizar_logout()
-    st.divider()
-    opcoes_menu = ["Plano de Contas", "Novo Lançamento", "Diário (Extrato)", "Razonetes (T)", "Balancete", "DRE (Resultado)", "Balanço Patrimonial"]
-    if perfil in ['admin', 'professor']: opcoes_menu.append("Gestão de Usuários"); opcoes_menu.append("Configurações")
-    menu = st.radio("Navegação", opcoes_menu)
-    rodape_institucional()
+    try: st.image("assets/logo.png", width=100)
+    except: pass
+    st.write(f"Olá, **{me.nome.split()[0]}**")
+    st.caption(f"Perfil: {me.perfil.replace('admin', 'Administrador').upper()}")
+    
+    # OPÇÕES
+    opts = ["Dashboard"]
+    if me.perfil == 'admin':
+        opts.extend(["Escolas", "Professores", "Turmas", "Alunos"])
+        opts.extend(["Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"]) 
+    elif me.perfil == 'professor':
+        opts.extend(["Minhas Turmas", "Meus Alunos", "Postar Aulas"])
+        opts.extend(["Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"])
+    elif me.perfil == 'aluno':
+        opts.extend(["Minhas Aulas", "Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"])
+        
+    # USO DO RADIO NO LUGAR DO OPTION_MENU
+    menu = st.sidebar.radio("Menu Principal", opts, label_visibility="collapsed")
+    
+    if st.button("Sair do Sistema"): logout()
 
-def carregar_contas_analiticas():
-    results = session.exec(select(ContaContabil).where(ContaContabil.tipo == "Analítica")).all()
-    results.sort(key=lambda x: x.codigo)
-    return [f"{c.codigo} - {c.nome}" for c in results]
+# ==============================================================================
+# 6. CONTEÚDO
+# ==============================================================================
 
-def widget_filtro_data():
-    with st.expander("📅 Filtrar Período de Análise", expanded=True):
-        st.markdown("<small style='color:grey'>Selecione o intervalo de datas para visualizar os lançamentos.</small>", unsafe_allow_html=True)
+if menu == "Dashboard":
+    st.title("📊 Painel de Controle")
+    if me.perfil == 'admin':
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Escolas</div><div class='kpi-val'>{len(session.exec(select(Escola)).all())}</div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Professores</div><div class='kpi-val'>{len(session.exec(select(Usuario).where(Usuario.perfil=='professor')).all())}</div></div>", unsafe_allow_html=True)
+        c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Alunos</div><div class='kpi-val'>{len(session.exec(select(Usuario).where(Usuario.perfil=='aluno')).all())}</div></div>", unsafe_allow_html=True)
+    elif me.perfil == 'professor':
         c1, c2 = st.columns(2)
-        inicio_padrao = date(date.today().year, 1, 1) 
-        d_inicio = c1.date_input("Data Inicial", value=inicio_padrao)
-        d_fim = c2.date_input("Data Final", value=date.today())
-    return d_inicio, d_fim
+        nt = len(session.exec(select(Turma).where(Turma.professor_id==me.id)).all())
+        na = len(session.exec(select(Usuario).where(Usuario.criado_por_id==me.id)).all())
+        c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Minhas Turmas</div><div class='kpi-val'>{nt}</div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Meus Alunos</div><div class='kpi-val'>{na}</div></div>", unsafe_allow_html=True)
+    elif me.perfil == 'aluno':
+        _, _, rec, luc, _, _, _ = gerar_demonstrativos(me.id)
+        c1, c2 = st.columns(2)
+        c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Receita Bruta</div><div class='kpi-val' style='color:green'>{fmt_moeda(rec)}</div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Resultado Líquido</div><div class='kpi-val' style='color:{'blue' if luc >=0 else 'red'}'>{fmt_moeda(luc)}</div></div>", unsafe_allow_html=True)
 
-# --- CALLBACK PARA LANÇAMENTOS ---
-def callback_salvar_lancamento():
-    dt = st.session_state.get("k_data", date.today())
-    val = st.session_state.get("k_valor", 0.0)
-    hist = st.session_state.get("k_hist", "")
-    deb = st.session_state.get("k_debito")
-    cred = st.session_state.get("k_credito")
+    st.write(""); st.write(""); st.divider()
+    st.subheader("📚 Plano de Contas Geral")
+    contas_db = session.exec(select(ContaContabil).order_by(ContaContabil.codigo)).all()
+    df_contas = pd.DataFrame([{"Código": c.codigo, "Nome": c.nome, "Tipo": "Analítica" if c.tipo=='A' else "Sintética", "Natureza": c.natureza} for c in contas_db])
+    st.dataframe(df_contas, use_container_width=True, hide_index=True)
 
-    if deb and cred and val > 0 and deb != cred:
-        novo_lancamento = Lancamento(
-            data_lancamento=dt, 
-            historico=hist, 
-            valor=val, 
-            conta_debito=deb.split(" - ")[0], 
-            conta_credito=cred.split(" - ")[0], 
-            usuario_id=usuario_atual.id
-        )
-        salvar_lancamento(novo_lancamento)
-        st.toast("✅ Lançamento salvo com sucesso!", icon="💾")
-        st.session_state["k_valor"] = 0.0
-        st.session_state["k_hist"] = ""
-        st.session_state["k_debito"] = None
-        st.session_state["k_credito"] = None
+# --- GESTÃO ---
+elif menu == "Escolas" and me.perfil == 'admin':
+    st.header("🏢 Gestão de Escolas")
+    tab1, tab2 = st.tabs(["➕ Cadastrar", "⚙️ Gerenciar"])
+    with tab1:
+        with st.form("ne", clear_on_submit=True):
+            n = st.text_input("Nome da Escola"); c = st.text_input("Cidade")
+            if st.form_submit_button("Salvar", type="primary"): session.add(Escola(nome=n, cidade=c)); session.commit(); st.success("Salvo!"); st.rerun()
+        st.divider(); st.caption("Lista:"); st.dataframe(pd.DataFrame([e.model_dump() for e in session.exec(select(Escola)).all()]), use_container_width=True, hide_index=True)
+    with tab2:
+        escolas = session.exec(select(Escola)).all()
+        esc = st.selectbox("Selecione:", escolas, format_func=lambda x:x.nome)
+        if esc:
+            with st.form("edte", clear_on_submit=True):
+                nn = st.text_input("Nome", value=esc.nome); nc = st.text_input("Cidade", value=esc.cidade)
+                c1, c2 = st.columns(2)
+                if c1.form_submit_button("💾 Salvar"): e=session.get(Escola, esc.id); e.nome=nn; e.cidade=nc; session.add(e); session.commit(); st.success("Ok!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir", type="primary"):
+                    if session.exec(select(Usuario).where(Usuario.escola_id==esc.id)).first(): st.error("Erro: Vínculos existem.")
+                    else: e=session.get(Escola, esc.id); session.delete(e); session.commit(); st.success("Excluído!"); st.rerun()
+
+elif menu == "Professores" and me.perfil == 'admin':
+    st.header("👨‍🏫 Gestão de Professores")
+    escolas = session.exec(select(Escola)).all()
+    tab1, tab2 = st.tabs(["➕ Cadastrar", "⚙️ Gerenciar"])
+    with tab1:
+        with st.form("np", clear_on_submit=True):
+            n = st.text_input("Nome"); u = st.text_input("Login"); s = st.text_input("Senha", type="password"); e = st.selectbox("Escola", escolas, format_func=lambda x:x.nome)
+            if st.form_submit_button("Salvar", type="primary"): session.add(Usuario(nome=n, username=u, senha=s, perfil="professor", escola_id=e.id, criado_por_id=me.id)); session.commit(); st.success("Ok!"); st.rerun()
+        st.divider(); st.caption("Professores:"); st.dataframe(pd.DataFrame([{"Nome": p.nome, "Login": p.username} for p in session.exec(select(Usuario).where(Usuario.perfil=='professor')).all()]), use_container_width=True, hide_index=True)
+    with tab2:
+        profs = session.exec(select(Usuario).where(Usuario.perfil=='professor')).all()
+        p_sel = st.selectbox("Selecione:", profs, format_func=lambda x:x.nome)
+        if p_sel:
+            with st.form("edtp", clear_on_submit=True):
+                nn = st.text_input("Nome", value=p_sel.nome)
+                c1, c2 = st.columns(2)
+                if c1.form_submit_button("💾 Salvar"): p=session.get(Usuario, p_sel.id); p.nome=nn; session.add(p); session.commit(); st.success("Ok!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir", type="primary"):
+                    if session.exec(select(Turma).where(Turma.professor_id==p_sel.id)).first(): st.error("Erro: Professor tem turmas.")
+                    else: p=session.get(Usuario, p_sel.id); session.delete(p); session.commit(); st.success("Excluído!"); st.rerun()
+
+elif (menu == "Turmas" and me.perfil == 'admin') or (menu == "Minhas Turmas" and me.perfil == 'professor'):
+    st.header("🏫 Gestão de Turmas")
+    tab1, tab2 = st.tabs(["➕ Cadastrar", "⚙️ Gerenciar"])
+    with tab1:
+        with st.form("nt", clear_on_submit=True):
+            n = st.text_input("Nome Turma"); a = st.text_input("Ano", value="2026")
+            if st.form_submit_button("Criar", type="primary"): session.add(Turma(nome=n, ano_letivo=a, professor_id=me.id, escola_id=me.escola_id or 1)); session.commit(); st.success("Criado!"); st.rerun()
+    with tab2:
+        ts = session.exec(select(Turma).where(Turma.professor_id==me.id) if me.perfil=='professor' else select(Turma)).all()
+        if ts: st.dataframe(pd.DataFrame([{"Turma": t.nome, "Ano": t.ano_letivo} for t in ts]), use_container_width=True, hide_index=True)
+        t_sel = st.selectbox("Selecione:", ts, format_func=lambda x:x.nome) if ts else None
+        if t_sel:
+            with st.form("edtt", clear_on_submit=True):
+                nn = st.text_input("Nome", value=t_sel.nome)
+                c1,c2=st.columns(2)
+                if c1.form_submit_button("💾 Salvar"): t=session.get(Turma, t_sel.id); t.nome=nn; session.add(t); session.commit(); st.success("Ok!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir", type="primary"):
+                    if session.exec(select(Usuario).where(Usuario.turma_id==t_sel.id)).first(): st.error("Erro: Turma tem alunos.")
+                    else: t=session.get(Turma, t_sel.id); session.delete(t); session.commit(); st.success("Excluído!"); st.rerun()
+
+elif (menu == "Alunos" and me.perfil == 'admin') or (menu == "Meus Alunos" and me.perfil == 'professor'):
+    st.header("🎓 Gestão de Alunos")
+    turmas = session.exec(select(Turma).where(Turma.professor_id==me.id) if me.perfil=='professor' else select(Turma)).all()
+    tab1, tab2 = st.tabs(["➕ Matricular", "⚙️ Gerenciar"])
+    with tab1:
+        with st.form("na", clear_on_submit=True):
+            n = st.text_input("Nome"); u = st.text_input("Login"); s = st.text_input("Senha", type="password"); t = st.selectbox("Turma", turmas, format_func=lambda x:x.nome)
+            if st.form_submit_button("Matricular", type="primary"): session.add(Usuario(nome=n, username=u, senha=s, perfil="aluno", turma_id=t.id, criado_por_id=me.id)); session.commit(); st.success("Ok!"); st.rerun()
+    with tab2:
+        alus = session.exec(select(Usuario).where(Usuario.perfil=='aluno')).all()
+        if alus: st.dataframe(pd.DataFrame([{"Nome": a.nome, "Login": a.username} for a in alus]), use_container_width=True, hide_index=True)
+        a_sel = st.selectbox("Selecione:", alus, format_func=lambda x:x.nome) if alus else None
+        if a_sel:
+            with st.form("edta", clear_on_submit=True):
+                nn = st.text_input("Nome", value=a_sel.nome)
+                c1,c2=st.columns(2)
+                if c1.form_submit_button("💾 Salvar"): a=session.get(Usuario, a_sel.id); a.nome=nn; session.add(a); session.commit(); st.success("Ok!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir", type="primary"):
+                    if session.exec(select(Lancamento).where(Lancamento.usuario_id==a_sel.id)).first(): st.error("Erro: Aluno tem lançamentos.")
+                    else: a=session.get(Usuario, a_sel.id); session.delete(a); session.commit(); st.success("Excluído!"); st.rerun()
+
+elif menu == "Postar Aulas":
+    st.header("📤 Gestão de Aulas")
+    turmas = session.exec(select(Turma).where(Turma.professor_id==me.id)).all()
+    tab1, tab2 = st.tabs(["➕ Publicar", "⚙️ Gerenciar"])
+    with tab1:
+        with st.form("pa", clear_on_submit=True):
+            ti=st.text_input("Título"); de=st.text_area("Descrição"); tu=st.selectbox("Turma", turmas, format_func=lambda x:x.nome); fl=st.file_uploader("PDF", type=['pdf'])
+            if st.form_submit_button("Publicar", type="primary"): session.add(Aula(titulo=ti, descricao=de, turma_id=tu.id, professor_id=me.id, arquivo_blob=fl.read() if fl else None)); session.commit(); st.success("Publicado!"); st.rerun()
+    with tab2:
+        aulas = session.exec(select(Aula).where(Aula.professor_id==me.id)).all()
+        au = st.selectbox("Selecione:", aulas, format_func=lambda x:x.titulo) if aulas else None
+        if au:
+            with st.form("edtau", clear_on_submit=True):
+                t = st.text_input("Título", value=au.titulo); d = st.text_area("Desc", value=au.descricao)
+                c1,c2=st.columns(2)
+                if c1.form_submit_button("💾 Salvar"): a=session.get(Aula, au.id); a.titulo=t; a.descricao=d; session.add(a); session.commit(); st.success("Ok!"); st.rerun()
+                if c2.form_submit_button("🗑️ Excluir", type="primary"): a=session.get(Aula, au.id); session.delete(a); session.commit(); st.success("Excluído!"); st.rerun()
+
+elif menu == "Minhas Aulas":
+    st.header("📚 Sala de Aula")
+    if not me.turma_id: st.warning("Sem turma.")
     else:
-        st.toast("❌ Erro: Verifique contas (não podem ser iguais) e valor.", icon="❌")
+        for a in session.exec(select(Aula).where(Aula.turma_id==me.turma_id).order_by(desc(Aula.id))).all():
+            with st.expander(f"📅 {a.data_postagem} - {a.titulo}", expanded=True):
+                st.write(a.descricao)
+                if a.arquivo_blob: st.download_button("Baixar PDF", data=a.arquivo_blob, file_name="aula.pdf")
 
-# --- PÁGINAS ---
-if menu == "Plano de Contas":
-    st.header("Plano de Contas")
-    contas = session.exec(select(ContaContabil).order_by(ContaContabil.codigo)).all()
-    df_pc = pd.DataFrame([c.model_dump() for c in contas])
-    def indent_name(row):
-        padding = (row['nivel'] - 1) * 20
-        return [f'padding-left: {padding}px;' if col == 'nome' else '' for col in row.index]
-    styled_df = df_pc.style.apply(indent_name, axis=1)
-    st.dataframe(styled_df, hide_index=True, use_container_width=True, column_order=["codigo", "nome", "tipo", "natureza"], column_config={"codigo": st.column_config.TextColumn("Código"), "nome": st.column_config.TextColumn("Nome da Conta"), "tipo": st.column_config.TextColumn("Tipo"), "natureza": st.column_config.TextColumn("Natureza")})
+# --- CONTABILIDADE (INTEGRADA COM ID VIRTUAL E FORMATAÇÃO BR) ---
+
+elif menu == "Escrituração e Diário":
+    st.header("📝 Escrituração e Diário")
+    mapa = get_contas_analiticas(); contas = sorted(list(mapa.values()))
+    
+    st.subheader("Novo Lançamento")
+    with st.form("lanc", clear_on_submit=True):
+        ce, cd = st.columns(2)
+        with ce:
+            d = st.date_input("Data", value=date.today(), format="DD/MM/YYYY")
+            db = st.selectbox("Débito", contas, index=None); cr = st.selectbox("Crédito", contas, index=None)
+        with cd:
+            v = st.number_input("Valor (R$)", min_value=0.01, step=10.0, format="%.2f")
+            h = st.text_area("Histórico", height=107)
+        if st.form_submit_button("Gravar Lançamento", type="primary", use_container_width=True):
+            if db and cr and v>0: session.add(Lancamento(data_lancamento=d, valor=v, historico=h, conta_debito=db.split(" - ")[0], conta_credito=cr.split(" - ")[0], usuario_id=me.id)); session.commit(); st.success("Gravado!"); st.rerun()
+
+    st.markdown("---")
+    st.subheader("📖 Livro Diário")
+    lancs = session.exec(select(Lancamento).where(Lancamento.usuario_id==me.id).order_by(Lancamento.id)).all()
+    if lancs:
+        mapa_nomes = get_mapa_nomes()
+        data_display = []
+        for idx, l in enumerate(lancs, start=1):
+            # FORMATO BRASILEIRO NO DIARIO
+            data_display.append({"ID": idx, "Real_ID": l.id, "Data": l.data_lancamento.strftime("%d/%m/%Y"), 
+                                 "Débito": f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, '')}", 
+                                 "Crédito": f"{l.conta_credito} - {mapa_nomes.get(l.conta_credito, '')}", 
+                                 "Valor": fmt_moeda(l.valor), "Histórico": l.historico})
+        df = pd.DataFrame(data_display)
+        st.dataframe(df.drop(columns=["Real_ID"]), use_container_width=True, hide_index=True)
+        c1, c2 = st.columns([3, 1])
+        with c1: id_selecionado = st.selectbox("Selecione o ID para Excluir:", df["ID"].tolist())
+        with c2: 
+            st.write(""); st.write("")
+            if st.button("🗑️ Excluir Lançamento", type="primary", use_container_width=True): 
+                real_id = df.loc[df["ID"] == id_selecionado, "Real_ID"].values[0]
+                session.delete(session.get(Lancamento, int(real_id))); session.commit(); st.rerun()
+    else: st.info("Nenhum lançamento realizado.")
     botao_imprimir()
 
-elif menu == "Novo Lançamento":
-    st.header("📝 Escrituração")
-    st.caption(aviso_modo)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.date_input("Data do Fato", value=date.today(), max_value=date.today(), key="k_data")
-        st.number_input("Valor (R$)", min_value=0.00, step=10.00, key="k_valor")
-    with col2:
-        st.text_input("Histórico", help="Breve descrição", key="k_hist")
-    
-    st.divider()
-    lista = carregar_contas_analiticas()
-    c_deb, c_cred = st.columns(2)
-    with c_deb: 
-        st.selectbox("Débito (Destino/Aplicação)", lista, index=None, placeholder="Selecione...", key="k_debito")
-    with c_cred: 
-        st.selectbox("Crédito (Origem/Fonte)", lista, index=None, placeholder="Selecione...", key="k_credito")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.button("💾 Salvar Lançamento", type="primary", on_click=callback_salvar_lancamento)
-
-elif menu == "Diário (Extrato)":
-    st.header("📖 Diário Contábil")
-    d_ini, d_fim = widget_filtro_data()
-    query = select(Lancamento).where(Lancamento.data_lancamento >= d_ini).where(Lancamento.data_lancamento <= d_fim).order_by(desc(Lancamento.data_lancamento), desc(Lancamento.id))
-    if filtro_id: query = query.where(Lancamento.usuario_id == filtro_id)
-    res = session.exec(query).all()
-    if res:
-        df = pd.DataFrame([l.model_dump() for l in res])
-        st.dataframe(df, hide_index=True, use_container_width=True, column_config={"valor": st.column_config.NumberColumn(format="R$ %.2f")})
-        botao_imprimir()
-        st.divider()
-        with st.expander("🗑️ Corrigir/Excluir Lançamento"):
-            st.write(f"Editando lançamentos do período: {d_ini.strftime('%d/%m')} até {d_fim.strftime('%d/%m')}")
-            if res:
-                lancamento_para_apagar = st.selectbox("Selecione o lançamento:", res, format_func=lambda x: f"ID {x.id} | {x.data_lancamento} | R$ {x.valor:.2f} | {x.historico}")
-                if st.button("Confirmar Exclusão", type="secondary"):
-                    excluir_lancamento_individual(lancamento_para_apagar.id)
-                    st.success("Apagado!"); time.sleep(1); st.rerun()
-    else: st.warning(f"Nenhum lançamento encontrado entre {d_ini.strftime('%d/%m/%Y')} e {d_fim.strftime('%d/%m/%Y')}.")
-
-elif menu == "Razonetes (T)":
+elif menu == "Razonetes":
     st.header("🗂️ Razonetes")
-    dados = obter_dados_razonetes(session, filtro_id)
-    if not dados: st.info("Faça lançamentos para ver os razonetes.")
+    mov = calcular_movimentacao(me.id)
+    if not mov: st.info("Sem lançamentos.")
     else:
-        st.markdown("---")
-        cols = st.columns(3)
-        for i, c in enumerate(dados):
-            with cols[i % 3]:
-                html_d = "".join([f"<div>{v:,.2f}</div>" for v in c['mov_debitos']])
-                html_c = "".join([f"<div>{v:,.2f}</div>" for v in c['mov_creditos']])
-                st.markdown(f"""<div class="razonete-container"><div class="razonete-header">{c['nome']}</div><div class="razonete-body"><div class="col-debito">{html_d}</div><div class="col-credito">{html_c}</div></div><div class="razonete-footer"><div style="width:50%;text-align:right;color:#d63031;">Total: {c['total_d']:,.2f}</div><div style="width:50%;padding-left:10px;color:#0984e3;">Total: {c['total_c']:,.2f}</div></div></div>""", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        botao_imprimir()
+        cols = st.columns(3); i=0
+        for k, v in mov.items():
+            titulo = f"{k} - {v['nome']}"
+            html = f"""<div class='razonete-container'><div class='razonete-header'>{titulo}</div><div class='razonete-body'><div class='col-debito'>{fmt_moeda(v['total_debito'])}</div><div class='col-credito'>{fmt_moeda(v['total_credito'])}</div></div></div>"""
+            cols[i%3].markdown(html, unsafe_allow_html=True); i+=1
+    botao_imprimir()
 
 elif menu == "Balancete":
     st.header("⚖️ Balancete de Verificação")
-    df, td, tc = gerar_balancete(session, filtro_id)
-    if not df.empty:
-        st.dataframe(df, hide_index=True, use_container_width=True, column_config={"Total Débitos": st.column_config.NumberColumn(format="R$ %.2f"), "Total Créditos": st.column_config.NumberColumn(format="R$ %.2f"), "Saldo Atual": st.column_config.NumberColumn(format="R$ %.2f")})
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Débito", f"R$ {td:,.2f}"); c2.metric("Total Crédito", f"R$ {tc:,.2f}")
-        if round(td - tc, 2) == 0: c3.success("✅ Partidas Dobradas: OK!")
-        else: c3.error(f"⚠️ Diferença: {td-tc}")
-        botao_imprimir()
-    else: st.info("Vazio.")
-
-elif menu == "DRE (Resultado)":
-    st.header("📉 Demonstração do Resultado (DRE)")
-    dados, lucro = gerar_relatorio_dre(session, filtro_id)
-    cor_resultado = "normal" if lucro >= 0 else "off"
-    st.metric("Resultado Líquido do Exercício", f"R$ {lucro:,.2f}", delta="Lucro" if lucro > 0 else "Prejuízo", delta_color=cor_resultado)
-    st.divider()
-    for l in dados:
-        c1, c2 = st.columns([3, 1])
-        if l["Destaque"]: c1.markdown(f"**{l['Descrição']}**"); c2.markdown(f"**R$ {l['Valor']:,.2f}**")
-        else: c1.write(l['Descrição']); c2.write(f"R$ {l['Valor']:,.2f}")
-        st.markdown("---")
+    mov = calcular_movimentacao(me.id)
+    if not mov: st.info("Sem dados.")
+    else:
+        lista = []
+        for k, v in mov.items():
+            lista.append({"Conta": f"{k} - {v['nome']}", "Total Débitos": fmt_moeda(v['total_debito']), "Total Créditos": fmt_moeda(v['total_credito']), "Saldo Final": fmt_moeda(v['saldo']), "Natureza": v['natureza']})
+        st.dataframe(pd.DataFrame(lista), use_container_width=True, hide_index=True)
     botao_imprimir()
 
-elif menu == "Balanço Patrimonial":
+elif menu == "DRE":
+    st.header("📉 DRE - Demonstração do Resultado")
+    _, _, _, _, _, _, df_dre = gerar_demonstrativos(me.id)
+    st.dataframe(df_dre[["Descrição", "Valor"]], use_container_width=True, hide_index=True)
+    botao_imprimir()
+
+elif menu == "Balanço":
     st.header("🏛️ Balanço Patrimonial")
-    st.markdown("---")
-    la, lp, ta, tp = gerar_dados_balanco(session, filtro_id)
-    c1, c2, c3 = st.columns([1, 0.1, 1])
+    at, pas, _, _, df_a, df_p, _ = gerar_demonstrativos(me.id)
+    c1, c2 = st.columns(2)
     with c1:
-        st.subheader("Ativo"); st.markdown("<div style='background:#f0f2f6;padding:10px;border-radius:10px;'>", unsafe_allow_html=True)
-        for i in la: st.write(f"**{i['Grupo']}**" if i['Destaque'] else i['Grupo']); st.write(f"R$ {i['Valor']:,.2f}"); st.divider()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with c3:
-        st.subheader("Passivo"); st.markdown("<div style='background:#f0f2f6;padding:10px;border-radius:10px;'>", unsafe_allow_html=True)
-        for i in lp: st.write(f"**{i['Grupo']}**" if i['Destaque'] else i['Grupo']); st.write(f"R$ {i['Valor']:,.2f}"); st.divider()
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("---")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Total Ativo", f"R$ {ta:,.2f}"); m2.metric("Total Passivo + PL", f"R$ {tp:,.2f}")
-    if round(ta - tp, 2) == 0: m3.success("✅ Balanço Fechado!")
-    else: m3.error(f"⚠️ Diferença de R$ {ta-tp:,.2f}")
+        st.markdown("<div class='report-header'>ATIVO</div>", unsafe_allow_html=True)
+        if not df_a.empty:
+            df_a["Saldo"] = df_a["Saldo"].apply(fmt_moeda)
+            st.dataframe(df_a[["Conta", "Saldo"]], use_container_width=True, hide_index=True)
+        st.info(f"TOTAL ATIVO: {fmt_moeda(at)}")
+    with c2:
+        st.markdown("<div class='report-header'>PASSIVO + PL</div>", unsafe_allow_html=True)
+        if not df_p.empty:
+            df_p["Saldo"] = df_p["Saldo"].apply(fmt_moeda)
+            st.dataframe(df_p[["Conta", "Saldo"]], use_container_width=True, hide_index=True)
+        st.warning(f"TOTAL PASSIVO: {fmt_moeda(pas)}")
     botao_imprimir()
-
-elif menu == "Gestão de Usuários":
-    st.header("👥 Gestão de Usuários")
-    opcoes = ["aluno", "professor", "admin"] if perfil == 'admin' else ["aluno"]
-    
-    with st.expander("➕ Cadastrar Novo Usuário", expanded=True):
-        col_cad1, col_cad2 = st.columns(2)
-        with col_cad1:
-            st.text_input("Nome", key="k_new_name")
-            st.text_input("Login", key="k_new_user")
-        with col_cad2:
-            st.text_input("Senha", type="password", key="k_new_pass")
-            st.selectbox("Perfil", opcoes, key="k_new_perf")
-        
-        st.button("Cadastrar", on_click=callback_criar_usuario)
-
-    st.divider()
-    st.subheader("🔐 Alterar Senhas")
-    if perfil == 'admin': users_change = session.exec(select(Usuario)).all()
-    else: users_change = session.exec(select(Usuario).where(Usuario.perfil == 'aluno')).all()
-    if users_change:
-        col_u, col_p, col_b = st.columns([2, 2, 1], vertical_alignment="bottom")
-        with col_u: user_to_change = st.selectbox("Usuário", users_change, format_func=lambda x: f"{x.nome} ({x.username})")
-        with col_p: new_pass = st.text_input("Nova Senha", type="password", key="new_pass_input")
-        with col_b:
-            if st.button("Alterar Senha", type="primary"):
-                if new_pass: alterar_senha_usuario(user_to_change.id, new_pass); st.success(f"Senha alterada!"); time.sleep(1); st.rerun()
-                else: st.warning("Digite a nova senha.")
-    st.divider()
-    st.subheader("🗑️ Excluir Usuários")
-    if perfil == 'admin': users_del = session.exec(select(Usuario).where(Usuario.id != usuario_atual.id)).all()
-    else: users_del = session.exec(select(Usuario).where(Usuario.perfil == 'aluno')).all()
-    if users_del:
-        user_to_delete = st.selectbox("Selecione para EXCLUIR:", users_del, format_func=lambda x: f"{x.nome} ({x.perfil})")
-        if st.button(f"Excluir {user_to_delete.nome}", type="primary"): deletar_usuario_por_id(user_to_delete.id); st.success("Excluído!"); time.sleep(1); st.rerun()
-    st.divider()
-    st.subheader("Lista Geral")
-    todos_users = session.exec(select(Usuario)).all()
-    st.dataframe(pd.DataFrame([{"ID": u.id, "Nome": u.nome, "Login": u.username, "Perfil": u.perfil} for u in todos_users]), hide_index=True)
-
-elif menu == "Configurações":
-    st.header("⚙️ Gerenciamento de Dados")
-    st.subheader("🧹 Limpar Lançamentos por Usuário")
-    if perfil == 'admin': users_clean = session.exec(select(Usuario)).all()
-    else: users_clean = session.exec(select(Usuario).where(Usuario.perfil == 'aluno')).all()
-    if users_clean:
-        target_user = st.selectbox("Usuário para ZERAR lançamentos:", users_clean, format_func=lambda x: f"{x.nome} ({x.perfil})")
-        if st.button(f"Apagar Lançamentos de {target_user.nome}"): limpar_lancamentos_por_usuario(target_user.id); st.success("Apagado!"); time.sleep(1); st.rerun()
-    st.divider()
-    if perfil == 'admin':
-        st.subheader("🔥 Reset Global (Perigo)")
-        confirm = st.checkbox("Confirmar exclusão global")
-        if st.button("ZERAR TUDO", type="primary", disabled=not confirm): limpar_todos_lancamentos(); st.success("Resetado!"); time.sleep(1); st.rerun()
