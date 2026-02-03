@@ -5,13 +5,12 @@ from datetime import date
 from sqlmodel import SQLModel, Field, select, desc, text, create_engine, Session
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
-# CORREÇÃO LINHA 8: Removida a biblioteca externa para evitar erros
-# from streamlit_option_menu import option_menu 
+# BIBLIOTECA EXTERNA REMOVIDA PARA EVITAR ERROS
 import warnings
 import time
 
 # ==============================================================================
-# 1. CONFIGURAÇÕES & DESIGN (CORREÇÃO DE ALINHAMENTO)
+# 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
 warnings.filterwarnings("ignore")
 st.set_page_config(page_title="Guriatã Contabilidade", layout="wide", page_icon="🦅")
@@ -32,6 +31,16 @@ st.markdown("""
         border-radius: 8px; border: 1px solid #e0e0e0;
     }
     
+    /* CENTRALIZAÇÃO DE LOGO */
+    div[data-testid="stImage"] { 
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        width: 100%; 
+        margin-bottom: 20px; 
+    }
+    img { object-fit: contain; }
+
     /* Cards KPI */
     .kpi-card { 
         background: white; 
@@ -68,6 +77,13 @@ st.markdown("""
         background-color: #f8f9fa; color: #004b8d; 
         padding: 12px; border-radius: 8px; text-align: center; 
         font-weight: 700; margin-bottom: 15px; border: 1px solid #e9ecef;
+    }
+    
+    /* Aviso Legal */
+    .legal-box {
+        background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404;
+        padding: 20px; border-radius: 8px; font-size: 0.9em; text-align: justify;
+        margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
 
     /* Impressão */
@@ -149,23 +165,20 @@ class Lancamento(SQLModel, table=True):
 
 def get_session(): return Session(engine)
 
-def inicializar_banco():
-    SQLModel.metadata.create_all(engine)
-    session = get_session()
-    
-    cols = {"usuario": ["escola_id INTEGER", "turma_id INTEGER", "xp INTEGER", "data_criacao DATE"], "turma": ["escola_id INTEGER"]}
-    for tab, cs in cols.items():
-        for c in cs:
-            try: session.exec(text(f"ALTER TABLE {tab} ADD COLUMN {c}")); session.commit()
-            except: pass
-
+def carregar_dados_padrao(session):
+    # Verifica se já existe o admin
     if not session.exec(select(Usuario).where(Usuario.username=="admin")).first():
-        esc = Escola(nome="Sede Administrativa", cidade="Matriz")
-        session.add(esc); session.commit()
+        # Verifica se já existe a escola para não duplicar
+        esc = session.exec(select(Escola).where(Escola.nome=="Sede Administrativa")).first()
+        if not esc:
+            esc = Escola(nome="Sede Administrativa", cidade="Matriz")
+            session.add(esc)
+            session.commit()
+            session.refresh(esc)
+        
         session.add(Usuario(username="admin", senha="123", nome="Administrador Geral", perfil="admin", termos_aceitos=True, escola_id=esc.id))
         session.commit()
     
-    # PLANO DE CONTAS MASTER
     if not session.exec(select(ContaContabil)).first():
         contas = [
             ("1", "ATIVO", "S", "D"), ("1.1", "CIRCULANTE", "S", "D"),
@@ -201,13 +214,20 @@ def inicializar_banco():
         for c, n, t, nat in contas: session.add(ContaContabil(codigo=c, nome=n, tipo=t, natureza=nat))
         session.commit()
 
+def inicializar_banco():
+    # Cria as tabelas SE não existirem
+    SQLModel.metadata.create_all(engine)
+    session = get_session()
+    # AQUI: Removi o bloco de 'try/except' que tentava alterar colunas manualmente. 
+    # Isso evita o IntegrityError. O create_all já garante a estrutura correta.
+    carregar_dados_padrao(session)
+
 inicializar_banco()
 
 # ==============================================================================
 # 3. LÓGICA CONTÁBIL
 # ==============================================================================
 def fmt_moeda(v):
-    # R$ X.XXX,XX
     return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 def get_mapa_nomes():
@@ -311,15 +331,10 @@ def logout(): st.session_state["user"] = None; st.rerun()
 
 if "user" not in st.session_state or not st.session_state["user"]:
     st.write(""); st.write("")
-    # COLUNAS ESTRATÉGICAS [5, 3, 5] PARA FORÇAR O MEIO
-    c1, c2, c3 = st.columns([5, 3, 5])
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # LOGO DENTRO DE COLUNAS ANINHADAS PARA GARANTIR CENTRO
-        i1, i2, i3 = st.columns([1, 2, 1])
-        with i2:
-            try: st.image("assets/logo.png", width=140) 
-            except: pass
-        
+        try: st.image("assets/logo.png", width=160) 
+        except: pass
         with st.form("login_form", clear_on_submit=True):
             st.text_input("Usuário", key="u_log", placeholder="Usuario")
             st.text_input("Senha", type="password", key="u_pass", placeholder="Senha")
@@ -336,12 +351,20 @@ if not me.termos_aceitos:
     st.write(""); st.write("")
     c1, c2, c3 = st.columns([1, 4, 1])
     with c2:
-        st.info("⚠️ SISTEMA DIDÁTICO: Proibido inserir dados reais. Use apenas dados fictícios.")
-        if st.button("✅ Li e Concordo", type="primary", use_container_width=True): me.termos_aceitos=True; session.add(me); session.commit(); st.rerun()
+        st.markdown("""
+        <div class="legal-box">
+            <h4>⚠️ POLÍTICA DE USO E PRIVACIDADE</h4>
+            <p>Este sistema (<b>Guriatã Contabilidade</b>) é um ambiente de simulação acadêmica (Sandbox), desenvolvido estritamente para fins pedagógicos.</p>
+            <p><b>1. Dados Proibidos:</b> Em conformidade com a Lei Geral de Proteção de Dados (<b>LGPD - Lei nº 13.709/2018</b>), é terminantemente <b>PROIBIDA</b> a inserção de dados verídicos que identifiquem pessoas físicas ou jurídicas (CPFs, RGs, CNPJs reais, endereços ou dados bancários).</p>
+            <p><b>2. Segurança:</b> Este ambiente não utiliza criptografia de nível bancário. O usuário assume total responsabilidade pelo uso de dados fictícios.</p>
+            <p>Ao clicar abaixo, você concorda que utilizará apenas dados simulados para suas atividades contábeis.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("✅ Li e Concordo com os Termos", type="primary", use_container_width=True): me.termos_aceitos=True; session.add(me); session.commit(); st.rerun()
     st.stop()
 
 # ==============================================================================
-# 5. MENU (CORRIGIDO: MENU NATIVO)
+# 5. MENU (MENU NATIVO - SEM ERROS)
 # ==============================================================================
 with st.sidebar:
     try: st.image("assets/logo.png", width=100)
@@ -349,21 +372,34 @@ with st.sidebar:
     st.write(f"Olá, **{me.nome.split()[0]}**")
     st.caption(f"Perfil: {me.perfil.replace('admin', 'Administrador').upper()}")
     
-    # OPÇÕES
-    opts = ["Dashboard"]
+    opts = ["Dashboard", "Meu Perfil"]
+    
     if me.perfil == 'admin':
         opts.extend(["Escolas", "Professores", "Turmas", "Alunos"])
         opts.extend(["Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"]) 
+
     elif me.perfil == 'professor':
         opts.extend(["Minhas Turmas", "Meus Alunos", "Postar Aulas"])
         opts.extend(["Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"])
+        
     elif me.perfil == 'aluno':
         opts.extend(["Minhas Aulas", "Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"])
         
-    # USO DO RADIO NO LUGAR DO OPTION_MENU
-    menu = st.sidebar.radio("Menu Principal", opts, label_visibility="collapsed")
+    menu = st.sidebar.radio("Navegação", opts, label_visibility="collapsed")
     
     if st.button("Sair do Sistema"): logout()
+    
+    st.markdown("---")
+    if st.button("⚠️ REINICIAR BANCO DE DADOS", type="primary", use_container_width=True):
+        st.cache_data.clear()
+        SQLModel.metadata.drop_all(engine)
+        SQLModel.metadata.create_all(engine)
+        session_temp = Session(engine)
+        carregar_dados_padrao(session_temp)
+        session_temp.close()
+        st.success("BANCO RESETADO!")
+        time.sleep(1)
+        st.rerun()
 
 # ==============================================================================
 # 6. CONTEÚDO
@@ -393,6 +429,22 @@ if menu == "Dashboard":
     contas_db = session.exec(select(ContaContabil).order_by(ContaContabil.codigo)).all()
     df_contas = pd.DataFrame([{"Código": c.codigo, "Nome": c.nome, "Tipo": "Analítica" if c.tipo=='A' else "Sintética", "Natureza": c.natureza} for c in contas_db])
     st.dataframe(df_contas, use_container_width=True, hide_index=True)
+
+# --- MEU PERFIL (SEGURANÇA ALUNO) ---
+elif menu == "Meu Perfil":
+    st.header("👤 Meu Perfil")
+    with st.form("myprofile"):
+        n = st.text_input("Meu Nome", value=me.nome)
+        s = st.text_input("Minha Senha", value=me.senha, type="password")
+        if me.perfil == 'aluno':
+            if st.form_submit_button("💾 Atualizar Senha/Dados"):
+                me.nome = n; me.senha = s; session.add(me); session.commit(); st.success("Atualizado!"); time.sleep(1); st.rerun()
+        else:
+            c1, c2 = st.columns(2)
+            if c1.form_submit_button("💾 Atualizar Dados"):
+                me.nome = n; me.senha = s; session.add(me); session.commit(); st.success("Atualizado!"); time.sleep(1); st.rerun()
+            if c2.form_submit_button("🗑️ Excluir Minha Conta", type="primary"):
+                session.delete(me); session.commit(); logout()
 
 # --- GESTÃO ---
 elif menu == "Escolas" and me.perfil == 'admin':
