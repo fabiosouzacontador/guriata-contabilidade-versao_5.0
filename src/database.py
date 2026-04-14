@@ -1,5 +1,7 @@
 from sqlmodel import SQLModel, Session, create_engine, select, delete
 import streamlit as st
+import bcrypt
+import secrets
 # Ajuste de importação para garantir que funcione em diferentes estruturas de pasta
 try:
     from src.models.account_model import ContaContabil
@@ -76,11 +78,16 @@ def deletar_usuario_por_id(user_id):
         session.exec(delete(Usuario).where(Usuario.id == user_id))
         session.commit()
 
+def _hash_password(plain: str) -> str:
+    """Hash a plaintext password with bcrypt."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
 def alterar_senha_usuario(user_id, nova_senha):
     with Session(engine) as session:
         usuario = session.get(Usuario, user_id)
         if usuario:
-            usuario.senha = nova_senha
+            usuario.senha = _hash_password(nova_senha)
             session.add(usuario)
             session.commit()
             return True
@@ -184,10 +191,18 @@ def populate_initial_data():
         # 2. USUÁRIOS PADRÃO
         if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
             print("Criando usuários padrão...")
-            admin = Usuario(username="admin", senha="123", nome="Administrador", perfil="admin")
-            prof = Usuario(username="professor", senha="123", nome="Professor Padrão", perfil="professor")
-            aluno = Usuario(username="aluno", senha="123", nome="Aluno Exemplo", perfil="aluno")
+            admin_pw = secrets.token_urlsafe(12)
+            prof_pw = secrets.token_urlsafe(12)
+            aluno_pw = secrets.token_urlsafe(12)
+            admin = Usuario(username="admin", senha=_hash_password(admin_pw), nome="Administrador", perfil="admin")
+            prof = Usuario(username="professor", senha=_hash_password(prof_pw), nome="Professor Padrão", perfil="professor")
+            aluno = Usuario(username="aluno", senha=_hash_password(aluno_pw), nome="Aluno Exemplo", perfil="aluno")
             session.add(admin)
             session.add(prof)
             session.add(aluno)
             session.commit()
+            print(f"[SECURITY] Default accounts created:")
+            print(f"  admin / {admin_pw}")
+            print(f"  professor / {prof_pw}")
+            print(f"  aluno / {aluno_pw}")
+            print("[SECURITY] Please change these passwords immediately after first login.")

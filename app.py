@@ -9,6 +9,21 @@ import base64
 from pathlib import Path
 import warnings
 import time
+import bcrypt
+import secrets
+
+
+def hash_password(plain: str) -> str:
+    """Hash a plaintext password with bcrypt."""
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash."""
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 # ==============================================================================
 # 1. CONFIGURAÇÕES & DESIGN
@@ -247,10 +262,12 @@ def gerar_html_impressao(menu, me, session):
 # ==============================================================================
 import os
 
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL",
-    "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-)
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is required. "
+        "Set it to your PostgreSQL connection string."
+    )
 
 engine = create_engine(DATABASE_URL)
 class Escola(SQLModel, table=True):
@@ -318,8 +335,11 @@ def carregar_dados_padrao(session):
         if not esc:
             esc = Escola(nome="Sede Administrativa", cidade="Matriz")
             session.add(esc); session.commit(); session.refresh(esc)
-        session.add(Usuario(username="admin", senha="123", nome="Administrador Geral", perfil="admin", termos_aceitos=True, escola_id=esc.id))
+        generated_pw = secrets.token_urlsafe(12)
+        session.add(Usuario(username="admin", senha=hash_password(generated_pw), nome="Administrador Geral", perfil="admin", termos_aceitos=True, escola_id=esc.id))
         session.commit()
+        print(f"[SECURITY] Default admin account created. Username: admin  Password: {generated_pw}")
+        print("[SECURITY] Please change this password immediately after first login.")
     if not session.exec(select(ContaContabil)).first():
         contas = [
             ("1", "ATIVO", "S", "D"), ("1.1", "CIRCULANTE", "S", "D"),
@@ -457,8 +477,8 @@ def login():
     s = get_session()
     u = st.session_state.get("u_log", "").strip()
     p = st.session_state.get("u_pass", "").strip()
-    user = s.exec(select(Usuario).where(Usuario.username == u).where(Usuario.senha == p)).first()
-    if user:
+    user = s.exec(select(Usuario).where(Usuario.username == u)).first()
+    if user and verify_password(p, user.senha):
         st.session_state["user"] = user
         st.rerun()
     else:
@@ -691,7 +711,7 @@ elif menu == "Meu Perfil":
     st.header("👤 Meu Perfil")
     with st.form("myprofile"):
         n = st.text_input("Meu Nome", value=me.nome)
-        s = st.text_input("Minha Senha", value=me.senha, type="password")
+        s = st.text_input("Nova Senha", value="", type="password", placeholder="Deixe em branco para manter a atual")
         
         # Mostrar escola vinculada para professores
         if me.perfil == 'professor' and me.escola_id:
@@ -699,7 +719,9 @@ elif menu == "Meu Perfil":
             st.selectbox("Escola vinculada", [escola], format_func=lambda x: x.nome, disabled=True)
         
         if st.form_submit_button("💾 Atualizar", type="primary", use_container_width=True):
-            me.nome, me.senha = n, s
+            me.nome = n
+            if s.strip():
+                me.senha = hash_password(s.strip())
             session.add(me); session.commit()
             st.success("Perfil atualizado!")
             st.rerun()
@@ -749,13 +771,14 @@ elif menu == "Meus Alunos":
                 n = st.text_input("Nome completo do aluno", placeholder="Ex: João Pedro Oliveira")
                 u = st.text_input("Login de acesso", placeholder="Ex: joao.pedro")
                 t = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                st.caption("A senha inicial será **123**. O aluno poderá alterá-la no primeiro acesso.")
+                st.caption("Uma senha segura será gerada automaticamente.")
                 salvar = st.form_submit_button("✅ Matricular Aluno", type="primary", use_container_width=True)
             if salvar:
                 if n and u:
-                    session.add(Usuario(nome=n, username=u, senha="123", perfil="aluno", turma_id=t.id, criado_por_id=me.id))
+                    generated_pw = secrets.token_urlsafe(8)
+                    session.add(Usuario(nome=n, username=u, senha=hash_password(generated_pw), perfil="aluno", turma_id=t.id, criado_por_id=me.id))
                     session.commit()
-                    st.success(f"Aluno '{n}' matriculado com sucesso!"); st.rerun()
+                    st.success(f"Aluno '{n}' matriculado! Senha inicial: {generated_pw}"); st.rerun()
                 else:
                     st.warning("Preencha o nome e o login antes de salvar.")
             
@@ -916,13 +939,14 @@ elif menu == "Professores":
         n = st.text_input("Nome completo", placeholder="Ex: Maria da Silva Santos")
         u = st.text_input("Login de acesso", placeholder="Ex: maria.santos")
         e = st.selectbox("Escola vinculada", escolas, format_func=lambda x: x.nome)
-        st.caption("A senha inicial será **123**. O professor poderá alterá-la no primeiro acesso.")
+        st.caption("Uma senha segura será gerada automaticamente.")
         salvar = st.form_submit_button("💾 Cadastrar professor", type="primary", use_container_width=True)
     if salvar:
         if n and u:
-            session.add(Usuario(nome=n, username=u, senha="123", perfil="professor", escola_id=e.id))
+            generated_pw = secrets.token_urlsafe(8)
+            session.add(Usuario(nome=n, username=u, senha=hash_password(generated_pw), perfil="professor", escola_id=e.id))
             session.commit()
-            st.success(f"Professor '{n}' cadastrado com sucesso!"); st.rerun()
+            st.success(f"Professor '{n}' cadastrado! Senha inicial: {generated_pw}"); st.rerun()
         else:
             st.warning("Preencha o nome e o login antes de salvar.")
     st.divider()
@@ -964,13 +988,14 @@ elif menu == "Alunos":
         n = st.text_input("Nome completo do aluno", placeholder="Ex: João Pedro Oliveira")
         u = st.text_input("Login de acesso", placeholder="Ex: joao.pedro")
         t = st.selectbox("Turma", turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-        st.caption("A senha inicial será **123**. O aluno poderá alterá-la no primeiro acesso.")
+        st.caption("Uma senha segura será gerada automaticamente.")
         salvar = st.form_submit_button("💾 Matricular aluno", type="primary", use_container_width=True)
     if salvar:
         if n and u:
-            session.add(Usuario(nome=n, username=u, senha="123", perfil="aluno", turma_id=t.id, criado_por_id=me.id))
+            generated_pw = secrets.token_urlsafe(8)
+            session.add(Usuario(nome=n, username=u, senha=hash_password(generated_pw), perfil="aluno", turma_id=t.id, criado_por_id=me.id))
             session.commit()
-            st.success(f"Aluno '{n}' matriculado com sucesso!"); st.rerun()
+            st.success(f"Aluno '{n}' matriculado! Senha inicial: {generated_pw}"); st.rerun()
         else:
             st.warning("Preencha o nome e o login antes de salvar.")
     st.divider()
