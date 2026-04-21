@@ -15,10 +15,22 @@ import os
 # 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
 warnings.filterwarnings("ignore")
+
+# Função para carregar a logo e converter para base64 (para favicon)
+def get_logo_base64():
+    logo_path = "assets/logo.png"
+    if Path(logo_path).exists():
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return None
+
+logo_base64 = get_logo_base64()
+
+# Configuração da página com favicon e título
 st.set_page_config(
-    page_title="Contabilidade",
+    page_title="Guriata - Sistema Contábil",
     layout="centered",
-    page_icon="🦅",
+    page_icon="🦅" if not logo_base64 else f"data:image/png;base64,{logo_base64}",
     initial_sidebar_state="expanded"
 )
 
@@ -73,6 +85,23 @@ st.markdown("""
         padding: 20px; border-radius: 8px; font-size: 0.9em; text-align: justify;
         margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
+    .total-card {
+        background: linear-gradient(135deg, #004b8d, #0066c0);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        margin-top: 20px;
+    }
+    .total-card h3 {
+        margin: 0;
+        font-size: 1rem;
+    }
+    .total-card .valor {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-top: 5px;
+    }
     @media print {
         [data-testid="stSidebar"] { display: none; }
         .stButton, .stForm, .stSelectbox, .stTextInput, .stNumberInput, .stDateInput, .stTextArea { display: none !important; }
@@ -93,8 +122,8 @@ def get_image_base64(image_path):
     except:
         return None
 
-def slugify(text):
-    safe = text.lower()
+def slugify(s):
+    safe = s.lower()
     replacements = {
         'ã': 'a', 'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a',
         'é': 'e', 'ê': 'e', 'ë': 'e',
@@ -120,20 +149,20 @@ def botao_imprimir(menu, me, session):
 
 def gerar_html_impressao(menu, me, session):
     def tabela_html(cabecalhos, linhas):
-        html_t = "table"
-        for h in cabecalhos:
-            html_t += f"<th>{h}</th>"
-        html_t += "tr"
+        html_t = "<table>"
+        html_t += "<tr>" + "".join(f"<th>{h}</th>" for h in cabecalhos) + "</tr>"
         for linha in linhas:
-            html_t += "<tr>"
-            for v in linha:
-                html_t += f" looks{v}Nine"
-            html_t += "</tr>"
+            html_t += "<td>" + "".join(f"<td>{v}</td>" for v in linha) + "</tr>"
         html_t += "</table>"
         return html_t
 
     def formatar_conta_row(conta, dados):
-        return [f"{conta} - {dados['nome']}", fmt_moeda(dados['total_debito']), fmt_moeda(dados['total_credito']), fmt_moeda(dados['saldo'])]
+        return [
+            f"{conta} - {dados['nome']}",
+            fmt_moeda(dados['total_debito']),
+            fmt_moeda(dados['total_credito']),
+            fmt_moeda(dados['saldo'])
+        ]
 
     def gerar_balanco_html(grupos, nomes_grupos):
         html_b = ""
@@ -177,59 +206,87 @@ def gerar_html_impressao(menu, me, session):
             linhas = []
             mapa_nomes = get_mapa_nomes()
             for l in lancs:
-                linhas.append([l.data_lancamento, f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, l.conta_debito)}", f"{l.conta_credito} - {mapa_nomes.get(l.conta_credito, l.conta_credito)}", fmt_moeda(l.valor), l.historico or "—"])
+                linhas.append([
+                    l.data_lancamento,
+                    f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, l.conta_debito)}",
+                    f"{l.conta_credito} - {mapa_nomes.get(l.conta_credito, l.conta_credito)}",
+                    fmt_moeda(l.valor),
+                    l.historico or "—"
+                ])
             html += "<h2>Diário de Lançamentos</h2>"
             html += tabela_html(["Data", "Débito", "Crédito", "Valor", "Histórico"], linhas)
         else:
             html += "<p>Nenhum lançamento registrado.</p>"
+
     elif menu == "Razonetes":
         mov = calcular_movimentacao(me.id)
         html += "<h2>Razonetes</h2>"
         for conta, v in sorted(mov.items()):
             html += f"<h3>{conta} - {v['nome']}</h3>"
-            html += tabela_html(["Total Débito", "Total Crédito", "Saldo"], [[fmt_moeda(v['total_debito']), fmt_moeda(v['total_credito']), fmt_moeda(v['saldo'])]])
+            html += tabela_html(
+                ["Total Débito", "Total Crédito", "Saldo"],
+                [[fmt_moeda(v['total_debito']), fmt_moeda(v['total_credito']), fmt_moeda(v['saldo'])]]
+            )
+
     elif menu == "Balancete":
         mov = calcular_movimentacao(me.id)
         html += "<h2>Balancete completo</h2>"
         if mov:
             linhas = [formatar_conta_row(k, v) for k, v in sorted(mov.items())]
             html += tabela_html(["Conta", "Débito", "Crédito", "Saldo"], linhas)
+            total_debito = sum(v['total_debito'] for v in mov.values())
+            total_credito = sum(v['total_credito'] for v in mov.values())
+            html += f"<p><strong>Total Débitos:</strong> {fmt_moeda(total_debito)}</p>"
+            html += f"<p><strong>Total Créditos:</strong> {fmt_moeda(total_credito)}</p>"
+            html += f"<p><strong>Diferença:</strong> {fmt_moeda(total_debito - total_credito)}</p>"
         else:
             html += "<p>Nenhuma movimentação encontrada.</p>"
+
     elif menu == "DRE":
-        _, _, rec_bruta, _, _, _, _, _, _ = gerar_demonstrativos(me.id)
         mov = calcular_movimentacao(me.id)
         grupos = {
             "Receitas Operacionais Brutas": [(k, d['saldo']) for k, d in sorted(mov.items()) if k.startswith('3.1')],
-            "Deduções de Receita": [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('3.2')],
-            "Receitas Financeiras": [(k, d['saldo']) for k, d in sorted(mov.items()) if k.startswith('3.3')],
-            "Custos (CMV / CSP)": [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('4')],
-            "Despesas Operacionais": [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('5')],
-            "Despesas Financeiras": [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('6.1')],
+            "Deduções de Receita":          [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('3.2')],
+            "Receitas Financeiras":         [(k, d['saldo']) for k, d in sorted(mov.items()) if k.startswith('3.3')],
+            "Custos (CMV / CSP)":           [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('4')],
+            "Despesas Operacionais":        [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('5')],
+            "Despesas Financeiras":         [(k, d['saldo'] * -1) for k, d in sorted(mov.items()) if k.startswith('6.1')],
         }
         html += "<h2>Demonstração do Resultado do Exercício</h2>"
         for titulo, linhas in grupos.items():
             if linhas:
                 html += f"<h3>{titulo}</h3>"
-                html += tabela_html(["Conta", "Valor"], [[f"{conta} - {mov[conta]['nome']}", fmt_moeda(valor)] for conta, valor in linhas])
+                html += tabela_html(
+                    ["Conta", "Valor"],
+                    [[f"{conta} - {mov[conta]['nome']}", fmt_moeda(valor)] for conta, valor in linhas]
+                )
                 subtotal = sum(v for _, v in linhas)
                 html += f"<p><strong>Subtotal {titulo}:</strong> {fmt_moeda(subtotal)}</p>"
-        rec_liquida = sum(v for _, v in grupos["Receitas Operacionais Brutas"]) + sum(v for _, v in grupos["Deduções de Receita"])
-        lucro_bruto = rec_liquida + sum(v for _, v in grupos["Custos (CMV / CSP)"])
-        resultado_operacional = lucro_bruto + sum(v for _, v in grupos["Despesas Operacionais"])
-        resultado_final = resultado_operacional + sum(v for _, v in grupos["Receitas Financeiras"]) + sum(v for _, v in grupos["Despesas Financeiras"])
+
+        rec_bruta    = sum(v for _, v in grupos["Receitas Operacionais Brutas"])
+        deducoes     = sum(v for _, v in grupos["Deduções de Receita"])
+        rec_liquida  = rec_bruta + deducoes
+        custos       = sum(v for _, v in grupos["Custos (CMV / CSP)"])
+        lucro_bruto  = rec_liquida + custos
+        despesas_op  = sum(v for _, v in grupos["Despesas Operacionais"])
+        rec_fin      = sum(v for _, v in grupos["Receitas Financeiras"])
+        desp_fin     = sum(v for _, v in grupos["Despesas Financeiras"])
+        res_op       = lucro_bruto + despesas_op
+        res_final    = res_op + rec_fin + desp_fin
+
         html += "<h3>Resumo</h3>"
         html += tabela_html(["Descrição", "Valor"], [
-            ["Receita Operacional Bruta", fmt_moeda(sum(v for _, v in grupos["Receitas Operacionais Brutas"]))],
-            ["Deduções da Receita", fmt_moeda(sum(v for _, v in grupos["Deduções de Receita"]))],
-            ["Receita Líquida", fmt_moeda(rec_liquida)],
-            ["Custos", fmt_moeda(sum(v for _, v in grupos["Custos (CMV / CSP)"]))],
-            ["Lucro Bruto", fmt_moeda(lucro_bruto)],
-            ["Despesas Operacionais", fmt_moeda(sum(v for _, v in grupos["Despesas Operacionais"]))],
-            ["Receitas Financeiras", fmt_moeda(sum(v for _, v in grupos["Receitas Financeiras"]))],
-            ["Despesas Financeiras", fmt_moeda(sum(v for _, v in grupos["Despesas Financeiras"]))],
-            ["Resultado Líquido", fmt_moeda(resultado_final)]
+            ["Receita Operacional Bruta",    fmt_moeda(rec_bruta)],
+            ["Deduções da Receita",          fmt_moeda(deducoes)],
+            ["Receita Líquida",              fmt_moeda(rec_liquida)],
+            ["Custos",                       fmt_moeda(custos)],
+            ["Lucro Bruto",                  fmt_moeda(lucro_bruto)],
+            ["Despesas Operacionais",        fmt_moeda(despesas_op)],
+            ["Receitas Financeiras",         fmt_moeda(rec_fin)],
+            ["Despesas Financeiras",         fmt_moeda(desp_fin)],
+            ["Resultado Líquido",            fmt_moeda(res_final)]
         ])
+
     elif menu == "Balanço":
         at, pas, _, _, grupos_a, grupos_p, _, nomes_a, nomes_p = gerar_demonstrativos(me.id)
         html += "<h2>Balanço Patrimonial</h2>"
@@ -246,10 +303,8 @@ def gerar_html_impressao(menu, me, session):
 # ==============================================================================
 # 2. BANCO DE DADOS & PLANO DE CONTAS MASTER (Neon PostgreSQL)
 # ==============================================================================
-# ⚠️ USE ESTA URL - SEM o "channel_binding=require"
 DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
-# Configuração do engine
 engine = create_engine(
     DATABASE_URL,
     echo=False,
@@ -257,14 +312,6 @@ engine = create_engine(
     pool_size=5,
     max_overflow=10
 )
-# Teste rápido de conexão (opcional - mostra status no console)
-try:
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    print("✅ Conexão com Neon PostgreSQL estabelecida com sucesso!")
-except Exception as e:
-    print(f"⚠️ Atenção: Erro ao conectar ao Neon: {str(e)}")
-    print("   O sistema continuará funcionando, mas os dados podem não ser salvos.")
 
 class Escola(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -392,37 +439,67 @@ def calcular_movimentacao(uid):
     s = get_session()
     lancs = s.exec(select(Lancamento).where(Lancamento.usuario_id == uid)).all()
     dados = {}
-    mapa_nat = {c.codigo: c.natureza for c in s.exec(select(ContaContabil)).all()}
-    mapa_nome = {c.codigo: c.nome for c in s.exec(select(ContaContabil)).all()}
+    mapa_nat  = {c.codigo: c.natureza for c in s.exec(select(ContaContabil)).all()}
+    mapa_nome = {c.codigo: c.nome     for c in s.exec(select(ContaContabil)).all()}
     for l in lancs:
-        if l.conta_debito not in dados: dados[l.conta_debito] = {'deb': 0.0, 'cred': 0.0}
+        if l.conta_debito not in dados:
+            dados[l.conta_debito] = {'deb': 0.0, 'cred': 0.0}
         dados[l.conta_debito]['deb'] += l.valor
-        if l.conta_credito not in dados: dados[l.conta_credito] = {'deb': 0.0, 'cred': 0.0}
+        if l.conta_credito not in dados:
+            dados[l.conta_credito] = {'deb': 0.0, 'cred': 0.0}
         dados[l.conta_credito]['cred'] += l.valor
     resultado = {}
     for k, v in dados.items():
-        nat = mapa_nat.get(k, 'D')
+        nat   = mapa_nat.get(k, 'D')
         saldo = v['deb'] - v['cred'] if nat == 'D' else v['cred'] - v['deb']
-        resultado[k] = {'nome': mapa_nome.get(k, k), 'natureza': nat, 'total_debito': v['deb'], 'total_credito': v['cred'], 'saldo': saldo}
+        resultado[k] = {
+            'nome':          mapa_nome.get(k, k),
+            'natureza':      nat,
+            'total_debito':  v['deb'],
+            'total_credito': v['cred'],
+            'saldo':         saldo
+        }
     return resultado
 
 def gerar_demonstrativos(uid):
     mov = calcular_movimentacao(uid)
-    rec_bruta = deducoes = custos = despesas_op = rec_financ = desp_financ = 0.0
-    ativo_total = passivo_total = 0.0
-    grupos_ativo = {"1.1": [], "1.2.1": [], "1.2.3": [], "1.2.4": []}
+    rec_bruta    = 0.0
+    deducoes     = 0.0
+    custos       = 0.0
+    despesas_op  = 0.0
+    rec_financ   = 0.0
+    desp_financ  = 0.0
+    ativo_total  = 0.0
+    passivo_total = 0.0
+
+    grupos_ativo   = {"1.1": [], "1.2.1": [], "1.2.3": [], "1.2.4": []}
     grupos_passivo = {"2.1": [], "2.2": [], "2.3": []}
-    nomes_grupos_a = {"1.1": "Ativo Circulante", "1.2.1": "Realizável a Longo Prazo", "1.2.3": "Imobilizado", "1.2.4": "Intangível"}
-    nomes_grupos_p = {"2.1": "Passivo Circulante", "2.2": "Passivo Não Circulante", "2.3": "Patrimônio Líquido"}
+    nomes_grupos_a = {
+        "1.1":   "Ativo Circulante",
+        "1.2.1": "Realizável a Longo Prazo",
+        "1.2.3": "Imobilizado",
+        "1.2.4": "Intangível"
+    }
+    nomes_grupos_p = {
+        "2.1": "Passivo Circulante",
+        "2.2": "Passivo Não Circulante",
+        "2.3": "Patrimônio Líquido"
+    }
 
     for conta, d in mov.items():
         saldo = d['saldo']
-        if conta.startswith('3.1'): rec_bruta += saldo
-        elif conta.startswith('3.2'): deducoes += saldo
-        elif conta.startswith('3.3'): rec_financ += saldo
-        elif conta.startswith('4'): custos += saldo
-        elif conta.startswith('5'): despesas_op += saldo
-        elif conta.startswith('6.1'): desp_financ += saldo
+        if conta.startswith('3.1'):
+            rec_bruta   += saldo
+        elif conta.startswith('3.2'):
+            deducoes    += saldo
+        elif conta.startswith('3.3'):
+            rec_financ  += saldo
+        elif conta.startswith('4'):
+            custos      += saldo
+        elif conta.startswith('5'):
+            despesas_op += saldo
+        elif conta.startswith('6.1'):
+            desp_financ += saldo
         elif conta.startswith('1'):
             ativo_total += saldo
             linha = {"Conta": f"{conta} - {d['nome']}", "Saldo": saldo}
@@ -430,7 +507,8 @@ def gerar_demonstrativos(uid):
             for pfx in ["1.2.4", "1.2.3", "1.2.1", "1.1"]:
                 if conta.startswith(pfx):
                     grupos_ativo[pfx].append(linha); encaixou = True; break
-            if not encaixou: grupos_ativo["1.1"].append(linha)
+            if not encaixou:
+                grupos_ativo["1.1"].append(linha)
         elif conta.startswith('2'):
             passivo_total += saldo
             linha = {"Conta": f"{conta} - {d['nome']}", "Saldo": saldo}
@@ -438,26 +516,27 @@ def gerar_demonstrativos(uid):
             for pfx in ["2.3", "2.2", "2.1"]:
                 if conta.startswith(pfx):
                     grupos_passivo[pfx].append(linha); encaixou = True; break
-            if not encaixou: grupos_passivo["2.1"].append(linha)
+            if not encaixou:
+                grupos_passivo["2.1"].append(linha)
 
-    rec_liquida = rec_bruta - deducoes
-    lucro_bruto = rec_liquida - custos
-    res_operacional = lucro_bruto - despesas_op
-    res_liquido = res_operacional + rec_financ - desp_financ
+    rec_liquida      = rec_bruta - deducoes
+    lucro_bruto      = rec_liquida - custos
+    res_operacional  = lucro_bruto - despesas_op
+    res_liquido      = res_operacional + rec_financ - desp_financ
 
     if res_liquido != 0:
         passivo_total += res_liquido
         grupos_passivo["2.3"].append({"Conta": "Resultado do Exercício", "Saldo": res_liquido})
 
     dre_rows = [
-        {"Descrição": "(=) Receita Operacional Bruta", "Valor": fmt_moeda(rec_bruta)},
-        {"Descrição": "(-) Deduções da Receita", "Valor": fmt_moeda(deducoes * -1)},
-        {"Descrição": "(=) Receita Operacional Líquida", "Valor": fmt_moeda(rec_liquida)},
-        {"Descrição": "(-) Custos (CMV/CSP)", "Valor": fmt_moeda(custos * -1)},
-        {"Descrição": "(=) Lucro Bruto", "Valor": fmt_moeda(lucro_bruto)},
-        {"Descrição": "(-) Despesas Operacionais", "Valor": fmt_moeda(despesas_op * -1)},
-        {"Descrição": "(+) Receitas Financeiras", "Valor": fmt_moeda(rec_financ)},
-        {"Descrição": "(-) Despesas Financeiras", "Valor": fmt_moeda(desp_financ * -1)},
+        {"Descrição": "(=) Receita Operacional Bruta",      "Valor": fmt_moeda(rec_bruta)},
+        {"Descrição": "(-) Deduções da Receita",            "Valor": fmt_moeda(deducoes * -1)},
+        {"Descrição": "(=) Receita Operacional Líquida",    "Valor": fmt_moeda(rec_liquida)},
+        {"Descrição": "(-) Custos (CMV/CSP)",               "Valor": fmt_moeda(custos * -1)},
+        {"Descrição": "(=) Lucro Bruto",                    "Valor": fmt_moeda(lucro_bruto)},
+        {"Descrição": "(-) Despesas Operacionais",          "Valor": fmt_moeda(despesas_op * -1)},
+        {"Descrição": "(+) Receitas Financeiras",           "Valor": fmt_moeda(rec_financ)},
+        {"Descrição": "(-) Despesas Financeiras",           "Valor": fmt_moeda(desp_financ * -1)},
         {"Descrição": "(=) Resultado Líquido do Exercício", "Valor": fmt_moeda(res_liquido)}
     ]
     df_dre = pd.DataFrame(dre_rows)
@@ -496,13 +575,11 @@ if "user" not in st.session_state or not st.session_state["user"]:
         [data-testid="stHeader"] { display: none !important; }
         [data-testid="stSidebar"] { display: none !important; }
         footer { display: none !important; }
-
         .block-container {
             padding-top: 6vh !important;
             padding-bottom: 0 !important;
             max-width: 480px !important;
         }
-
         .login-card {
             background: white;
             border-radius: 20px;
@@ -510,37 +587,16 @@ if "user" not in st.session_state or not st.session_state["user"]:
             overflow: hidden;
             margin-bottom: 0;
         }
-
         .login-hero {
             background: linear-gradient(160deg, #d4eaf4 0%, #e8f4f8 60%, #f0f8fc 100%);
             padding: 36px 40px 28px 40px;
             text-align: center;
             border-bottom: 1px solid #e8f0f5;
         }
-
         .login-body {
             padding: 28px 36px 32px 36px;
             background: white;
         }
-
-        .login-divider {
-            display: flex;
-            align-items: center;
-            margin: 0 0 20px 0;
-            gap: 10px;
-            color: #94a3b8;
-            font-size: 0.72em;
-            font-weight: 600;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-        .login-divider::before, .login-divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: #e2e8f0;
-        }
-
         .field-label {
             color: #334155;
             font-size: 0.72em;
@@ -550,7 +606,6 @@ if "user" not in st.session_state or not st.session_state["user"]:
             margin: 14px 0 4px 0;
             display: block;
         }
-
         .stTextInput > div > div > input {
             border-radius: 10px !important;
             border: 1.5px solid #e2e8f0 !important;
@@ -566,11 +621,8 @@ if "user" not in st.session_state or not st.session_state["user"]:
             background: white !important;
             box-shadow: 0 0 0 3px rgba(0, 75, 141, 0.10) !important;
         }
-        .stTextInput > div > div > input::placeholder {
-            color: #94a3b8 !important;
-        }
+        .stTextInput > div > div > input::placeholder { color: #94a3b8 !important; }
         .stTextInput label { display: none !important; }
-
         .stFormSubmitButton > button {
             height: 48px !important;
             font-size: 0.95em !important;
@@ -588,7 +640,6 @@ if "user" not in st.session_state or not st.session_state["user"]:
             box-shadow: 0 6px 20px rgba(0, 75, 141, 0.45) !important;
             transform: translateY(-1px) !important;
         }
-
         [data-testid="stForm"] {
             border: none !important;
             padding: 0 !important;
@@ -603,7 +654,6 @@ if "user" not in st.session_state or not st.session_state["user"]:
     else:
         img_tag = "<div style='font-size:5rem;'>🦅</div>"
 
-    # Card hero (logo)
     st.markdown(f"""
     <div class='login-card'>
         <div class='login-hero'>
@@ -611,19 +661,11 @@ if "user" not in st.session_state or not st.session_state["user"]:
         </div>
     """, unsafe_allow_html=True)
 
-    # Card formulário
     with st.form("login_form", clear_on_submit=True):
         st.markdown("<span class='field-label'>👤 Login de acesso</span>", unsafe_allow_html=True)
-        st.text_input("u", key="u_log",
-                      placeholder="Digite seu usuário",
-                      label_visibility="collapsed")
-
-        st.text_input("p", type="password", key="u_pass",
-                      placeholder="Digite sua senha",
-                      label_visibility="collapsed")
-
-        submitted = st.form_submit_button(
-            "ENTRAR", type="primary", use_container_width=True)
+        st.text_input("u", key="u_log", placeholder="Digite seu usuário", label_visibility="collapsed")
+        st.text_input("p", type="password", key="u_pass", placeholder="Digite sua senha", label_visibility="collapsed")
+        submitted = st.form_submit_button("ENTRAR", type="primary", use_container_width=True)
         if submitted:
             login()
 
@@ -685,7 +727,7 @@ with st.sidebar:
     if st.button("🚪 Sair do Sistema", use_container_width=True): logout()
 
 # ==============================================================================
-# 7. CONTEÚDO (mantido igual ao seu código original)
+# 7. CONTEÚDO
 # ==============================================================================
 if menu == "Dashboard":
     st.title("📊 Painel de Controle")
@@ -696,34 +738,23 @@ if menu == "Dashboard":
         c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Alunos</div><div class='kpi-val'>{len(session.exec(select(Usuario).where(Usuario.perfil=='aluno')).all())}</div></div>", unsafe_allow_html=True)
     elif me.perfil == 'professor':
         minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        total_turmas = len(minhas_turmas)
-        
-        total_alunos = len(session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()) if minhas_turmas else 0
-        
-        total_aulas = len(session.exec(select(Aula).where(Aula.professor_id == me.id)).all())
-        
-        escola_nome = session.get(Escola, me.escola_id).nome if me.escola_id else "Não vinculada"
-        
+        total_turmas  = len(minhas_turmas)
+        total_alunos  = len(session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()) if minhas_turmas else 0
+        total_aulas   = len(session.exec(select(Aula).where(Aula.professor_id == me.id)).all())
+        escola_nome   = session.get(Escola, me.escola_id).nome if me.escola_id else "Não vinculada"
         c1, c2, c3, c4 = st.columns(4)
         c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Minhas Turmas</div><div class='kpi-val'>{total_turmas}</div></div>", unsafe_allow_html=True)
         c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Total de Alunos</div><div class='kpi-val' style='color:#3498db'>{total_alunos}</div></div>", unsafe_allow_html=True)
         c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Aulas Postadas</div><div class='kpi-val' style='color:#e74c3c'>{total_aulas}</div></div>", unsafe_allow_html=True)
         c4.markdown(f"<div class='kpi-card'><div class='kpi-title'>Instituição</div><div class='kpi-val' style='font-size:0.9rem'>{escola_nome[:15]}...</div></div>", unsafe_allow_html=True)
-        
         st.divider()
         st.subheader("🎯 Suas Turmas")
-        
         if minhas_turmas:
             col1, col2 = st.columns(2)
             for idx, turma in enumerate(minhas_turmas):
                 alunos_na_turma = session.exec(select(Usuario).where(Usuario.turma_id == turma.id)).all()
-                aulas_turma = session.exec(select(Aula).where(Aula.turma_id == turma.id)).all()
-                
-                if idx % 2 == 0:
-                    col = col1
-                else:
-                    col = col2
-                
+                aulas_turma     = session.exec(select(Aula).where(Aula.turma_id == turma.id)).all()
+                col = col1 if idx % 2 == 0 else col2
                 with col.container(border=True):
                     col.write(f"**{turma.nome}**")
                     col.caption(f"Ano: {turma.ano_letivo}")
@@ -731,12 +762,9 @@ if menu == "Dashboard":
                     col.metric("Aulas", len(aulas_turma))
         else:
             st.info("Você ainda não tem turmas. Acesse 'Minhas Turmas' para criar uma!")
-        
         st.divider()
         st.subheader("📖 Últimas Aulas Postadas")
-        
         aulas_recentes = session.exec(select(Aula).where(Aula.professor_id == me.id).order_by(desc(Aula.data_postagem))).all()[:5]
-        
         if aulas_recentes:
             for aula in aulas_recentes:
                 turma_aula = session.get(Turma, aula.turma_id)
@@ -745,24 +773,21 @@ if menu == "Dashboard":
                     st.caption(f"📚 {turma_aula.nome if turma_aula else '?'} • 📅 {aula.data_postagem}")
                     st.write(f"_{aula.descricao[:80]}..._" if len(aula.descricao) > 80 else f"_{aula.descricao}_")
         else:
-            st.info("Você ainda não postou nenhuma aula. Acesse 'Postar Aulas' para começar!")
-        
+            st.info("Você ainda não postou nenhuma aula.")
     elif me.perfil == 'aluno':
         _, _, rec, luc, _, _, _, _, _ = gerar_demonstrativos(me.id)
         c1, c2 = st.columns(2)
         c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Receita Bruta</div><div class='kpi-val' style='color:green'>{fmt_moeda(rec)}</div></div>", unsafe_allow_html=True)
         cor_luc = 'green' if luc >= 0 else 'red'
         c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Resultado Líquido</div><div class='kpi-val' style='color:{cor_luc}'>{fmt_moeda(luc)}</div></div>", unsafe_allow_html=True)
-        
         if me.turma_id:
-            turma = session.get(Turma, me.turma_id)
+            turma      = session.get(Turma, me.turma_id)
             aulas_turma = session.exec(select(Aula).where(Aula.turma_id == me.turma_id)).all()
             st.divider()
             st.subheader("📚 Sua Turma e Aulas")
             c1, c2 = st.columns(2)
             c1.metric("Turma", turma.nome if turma else "?")
             c2.metric("Aulas Disponíveis", len(aulas_turma))
-    
     if me.perfil != 'professor':
         st.divider()
         st.subheader("📚 Plano de Contas Geral")
@@ -775,11 +800,9 @@ elif menu == "Meu Perfil":
     with st.form("myprofile"):
         n = st.text_input("Meu Nome", value=me.nome)
         s = st.text_input("Minha Senha", value=me.senha, type="password")
-        
         if me.perfil == 'professor' and me.escola_id:
             escola = session.get(Escola, me.escola_id)
             st.selectbox("Escola vinculada", [escola], format_func=lambda x: x.nome, disabled=True)
-        
         if st.form_submit_button("💾 Atualizar", type="primary", use_container_width=True):
             me.nome, me.senha = n, s
             session.add(me); session.commit()
@@ -801,7 +824,6 @@ elif menu == "Minhas Turmas":
                 st.success(f"Turma '{n}' criada com sucesso!"); st.rerun()
             else:
                 st.warning("Preencha o nome e o ano letivo antes de salvar.")
-        
         st.divider()
         st.subheader("📚 Suas Turmas")
         minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
@@ -809,8 +831,7 @@ elif menu == "Minhas Turmas":
             for t in minhas_turmas:
                 col1, col2, col3 = st.columns([3, 2, 1])
                 with col1:
-                    st.write(f"**{t.nome}**")
-                    st.caption(f"📅 {t.ano_letivo}")
+                    st.write(f"**{t.nome}**"); st.caption(f"📅 {t.ano_letivo}")
                 with col2:
                     alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == t.id)).all()
                     st.metric("Alunos", len(alunos_turma))
@@ -820,13 +841,11 @@ elif menu == "Minhas Turmas":
                         if alunos_turma:
                             st.error(f"Não é possível excluir a turma '{t.nome}' pois existem {len(alunos_turma)} aluno(s) matriculado(s).")
                         else:
-                            session.delete(t)
-                            session.commit()
-                            st.success(f"Turma '{t.nome}' excluída com sucesso!")
-                            st.rerun()
+                            session.delete(t); session.commit()
+                            st.success(f"Turma '{t.nome}' excluída!"); st.rerun()
                 st.divider()
         else:
-            st.info("Você ainda não tem turmas criadas. Crie uma usando o formulário acima!")
+            st.info("Você ainda não tem turmas criadas.")
     else:
         st.warning("Esta seção é apenas para professores.")
 
@@ -834,59 +853,43 @@ elif menu == "Meus Alunos":
     st.header("👥 Meus Alunos")
     if me.perfil == 'professor':
         minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        
         if not minhas_turmas:
-            st.error("Você não tem turmas criadas ainda. Crie uma turma em 'Minhas Turmas' primeiro!")
+            st.error("Você não tem turmas criadas ainda.")
         else:
             st.subheader("➕ Matricular Novo Aluno")
             with st.form("matricular_aluno_professor", clear_on_submit=True):
-                n = st.text_input("Nome completo do aluno", placeholder="Ex: João Pedro Oliveira")
-                u = st.text_input("Login de acesso", placeholder="Ex: joao.pedro")
+                n = st.text_input("Nome completo do aluno")
+                u = st.text_input("Login de acesso")
                 t = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                st.caption("A senha inicial será **123**. O aluno poderá alterá-la no primeiro acesso.")
+                st.caption("Senha inicial: **123**")
                 salvar = st.form_submit_button("✅ Matricular Aluno", type="primary", use_container_width=True)
             if salvar:
                 if n and u:
-                    existe = session.exec(select(Usuario).where(Usuario.username == u)).first()
-                    if existe:
-                        st.error("❌ Este login já está em uso. Escolha outro.")
+                    if session.exec(select(Usuario).where(Usuario.username == u)).first():
+                        st.error("❌ Login já em uso.")
                     else:
                         session.add(Usuario(nome=n, username=u, senha="123", perfil="aluno", turma_id=t.id, criado_por_id=me.id))
-                        session.commit()
-                        st.success(f"Aluno '{n}' matriculado com sucesso!")
-                        st.rerun()
+                        session.commit(); st.success(f"Aluno '{n}' matriculado!"); st.rerun()
                 else:
-                    st.warning("Preencha o nome e o login antes de salvar.")
-            
+                    st.warning("Preencha nome e login.")
             st.divider()
             st.subheader("📋 Seus Alunos")
             turmas_dict = {t.id: t.nome for t in minhas_turmas}
             alunos = session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()
-            
             if alunos:
                 for aluno in alunos:
                     col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-                    with col1:
-                        st.write(f"**{aluno.nome}**")
-                        st.caption(f"👤 @{aluno.username}")
-                    with col2:
-                        st.write(f"📚 {turmas_dict.get(aluno.turma_id, '—')}")
-                    with col3:
-                        st.caption(f"⭐ XP: {aluno.xp}")
-                    with col4:
-                        if st.button("🗑️", key=f"del_aluno_{aluno.id}", help="Excluir aluno"):
-                            lancamentos_aluno = session.exec(select(Lancamento).where(Lancamento.usuario_id == aluno.id)).all()
-                            if lancamentos_aluno:
-                                st.warning(f"O aluno '{aluno.nome}' possui {len(lancamentos_aluno)} lançamento(s). Eles também serão excluídos.")
-                                for lanc in lancamentos_aluno:
-                                    session.delete(lanc)
-                            session.delete(aluno)
-                            session.commit()
-                            st.success(f"Aluno '{aluno.nome}' excluído com sucesso!")
-                            st.rerun()
+                    col1.write(f"**{aluno.nome}**"); col1.caption(f"👤 @{aluno.username}")
+                    col2.write(f"📚 {turmas_dict.get(aluno.turma_id, '—')}")
+                    col3.caption(f"⭐ XP: {aluno.xp}")
+                    if col4.button("🗑️", key=f"del_aluno_{aluno.id}"):
+                        for lanc in session.exec(select(Lancamento).where(Lancamento.usuario_id == aluno.id)).all():
+                            session.delete(lanc)
+                        session.delete(aluno); session.commit()
+                        st.success(f"Aluno '{aluno.nome}' excluído!"); st.rerun()
                     st.divider()
             else:
-                st.info("Nenhum aluno matriculado em suas turmas. Use o formulário acima para adicionar alunos!")
+                st.info("Nenhum aluno matriculado.")
     else:
         st.warning("Esta seção é apenas para professores.")
 
@@ -894,71 +897,40 @@ elif menu == "Postar Aulas":
     st.header("📹 Postar Aulas")
     if me.perfil == 'professor':
         minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        
         if not minhas_turmas:
-            st.error("Você não tem turmas criadas. Crie uma turma antes de postar aulas.")
+            st.error("Você não tem turmas criadas.")
         else:
             with st.form("postar_aula", clear_on_submit=True):
-                turma = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                titulo = st.text_input("Título da aula", placeholder="Ex: Introdução à Contabilidade")
-                descricao = st.text_area("Descrição / Conteúdo", placeholder="Descreva o conteúdo da aula...")
-                arquivo = st.file_uploader("Anexar arquivo (PDF, DOC, PPT, etc.)", type=["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "jpg", "png"])
-                
+                turma    = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
+                titulo   = st.text_input("Título da aula")
+                descricao = st.text_area("Descrição / Conteúdo")
+                arquivo  = st.file_uploader("Anexar arquivo", type=["pdf","doc","docx","ppt","pptx","xls","xlsx","txt","jpg","png"])
                 if st.form_submit_button("📤 Postar Aula", type="primary", use_container_width=True):
                     if titulo and descricao:
-                        arquivo_blob = None
-                        if arquivo:
-                            try:
-                                arquivo_blob = arquivo.read()
-                            except Exception as e:
-                                st.error(f"Erro ao processar arquivo: {str(e)}")
-                                arquivo_blob = None
-                        
-                        aula = Aula(
-                            titulo=titulo,
-                            descricao=descricao,
-                            arquivo_blob=arquivo_blob,
-                            nome_arquivo=arquivo.name if arquivo else None,
-                            professor_id=me.id,
-                            turma_id=turma.id
-                        )
-                        session.add(aula)
-                        session.commit()
-                        st.success("✅ Aula postada com sucesso!")
-                        st.rerun()
+                        arquivo_blob = arquivo.read() if arquivo else None
+                        session.add(Aula(titulo=titulo, descricao=descricao, arquivo_blob=arquivo_blob,
+                                         nome_arquivo=arquivo.name if arquivo else None,
+                                         professor_id=me.id, turma_id=turma.id))
+                        session.commit(); st.success("✅ Aula postada!"); st.rerun()
                     else:
-                        st.warning("Preencha pelo menos o título e a descrição da aula.")
-            
+                        st.warning("Preencha título e descrição.")
             st.divider()
             st.subheader("📚 Aulas Postadas")
             aulas = session.exec(select(Aula).where(Aula.professor_id == me.id)).all()
-            
             if aulas:
                 turmas_dict = {t.id: t.nome for t in minhas_turmas}
                 for aula in reversed(aulas):
                     col1, col2 = st.columns([3, 1])
                     col1.write(f"**{aula.titulo}** — {turmas_dict.get(aula.turma_id, '?')}")
                     col1.write(f"*{aula.descricao[:100]}...*" if len(aula.descricao) > 100 else f"*{aula.descricao}*")
-                    col1.caption(f"📅 Postada em: {aula.data_postagem}")
-                    
+                    col1.caption(f"📅 {aula.data_postagem}")
                     if aula.arquivo_blob and aula.nome_arquivo:
-                        try:
-                            col2.download_button(
-                                label="⬇️ Download",
-                                data=aula.arquivo_blob,
-                                file_name=aula.nome_arquivo,
-                                key=f"download_aula_{aula.id}"
-                            )
-                        except Exception as e:
-                            col2.error(f"Erro: arquivo inválido")
-                    
+                        col2.download_button("⬇️ Download", data=aula.arquivo_blob, file_name=aula.nome_arquivo, key=f"dl_{aula.id}")
                     if col2.button("🗑️ Excluir", key=f"del_aula_{aula.id}"):
-                        session.delete(aula)
-                        session.commit()
-                        st.rerun()
+                        session.delete(aula); session.commit(); st.rerun()
                     st.divider()
             else:
-                st.info("Você ainda não postou nenhuma aula.")
+                st.info("Nenhuma aula postada ainda.")
     else:
         st.warning("Esta seção é apenas para professores.")
 
@@ -968,9 +940,7 @@ elif menu == "Minhas Aulas":
         if me.turma_id:
             aulas = session.exec(select(Aula).where(Aula.turma_id == me.turma_id)).all()
             turma = session.get(Turma, me.turma_id)
-            
             st.subheader(f"Aulas de {turma.nome if turma else 'sua turma'}")
-            
             if aulas:
                 for aula in reversed(aulas):
                     with st.container(border=True):
@@ -978,22 +948,12 @@ elif menu == "Minhas Aulas":
                         col1.write(f"**{aula.titulo}**")
                         professor = session.get(Usuario, aula.professor_id)
                         col2.caption(f"👨‍🏫 {professor.nome if professor else '?'}")
-                        
                         col1.write(aula.descricao)
-                        col1.caption(f"📅 Postada em: {aula.data_postagem}")
-                        
+                        col1.caption(f"📅 {aula.data_postagem}")
                         if aula.arquivo_blob and aula.nome_arquivo:
-                            try:
-                                col1.download_button(
-                                    label="⬇️ Baixar Arquivo",
-                                    data=aula.arquivo_blob,
-                                    file_name=aula.nome_arquivo,
-                                    key=f"download_aula_aluno_{aula.id}"
-                                )
-                            except Exception as e:
-                                col1.error(f"Erro ao baixar arquivo: arquivo inválido")
+                            col1.download_button("⬇️ Baixar Arquivo", data=aula.arquivo_blob, file_name=aula.nome_arquivo, key=f"dl_aluno_{aula.id}")
             else:
-                st.info("Nenhuma aula disponível no momento. Seu professor em breve postará aulas aqui!")
+                st.info("Nenhuma aula disponível no momento.")
         else:
             st.warning("Você não está matriculado em nenhuma turma.")
     else:
@@ -1001,312 +961,153 @@ elif menu == "Minhas Aulas":
 
 elif menu == "Escolas":
     st.header("🏢 Escolas")
-    
     st.subheader("➕ Cadastrar nova escola")
     with st.form("ne", clear_on_submit=True):
-        n = st.text_input("Nome da escola", placeholder="Ex: Escola Estadual Dom Pedro II")
-        c = st.text_input("Cidade", placeholder="Ex: São Luís")
+        n = st.text_input("Nome da escola")
+        c = st.text_input("Cidade")
         salvar = st.form_submit_button("💾 Salvar escola", type="primary", use_container_width=True)
         if salvar:
             if n and c:
-                session.add(Escola(nome=n, cidade=c))
-                session.commit()
-                st.success(f"Escola '{n}' cadastrada com sucesso!")
-                st.rerun()
+                session.add(Escola(nome=n, cidade=c)); session.commit()
+                st.success(f"Escola '{n}' cadastrada!"); st.rerun()
             else:
-                st.warning("Preencha o nome e a cidade antes de salvar.")
-    
+                st.warning("Preencha nome e cidade.")
     st.divider()
     st.subheader("📋 Escolas cadastradas")
-    
-    escolas_lista = session.exec(select(Escola)).all()
-    if escolas_lista:
-        for escola in escolas_lista:
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                st.write(f"**{escola.nome}**")
-                st.caption(f"📍 {escola.cidade}")
-            with col2:
-                st.caption(f"ID: {escola.id}")
-            with col3:
-                if st.button("🗑️ Excluir", key=f"del_escola_{escola.id}", use_container_width=True):
-                    professores_vinculados = session.exec(select(Usuario).where(Usuario.escola_id == escola.id).where(Usuario.perfil == 'professor')).all()
-                    if professores_vinculados:
-                        st.error(f"Não é possível excluir a escola '{escola.nome}' pois existem {len(professores_vinculados)} professor(es) vinculado(s).")
-                    else:
-                        session.delete(escola)
-                        session.commit()
-                        st.success(f"Escola '{escola.nome}' excluída com sucesso!")
-                        st.rerun()
-            st.divider()
-    else:
-        st.info("Nenhuma escola cadastrada ainda.")
+    for escola in session.exec(select(Escola)).all():
+        col1, col2, col3 = st.columns([3, 2, 1])
+        col1.write(f"**{escola.nome}**"); col1.caption(f"📍 {escola.cidade}")
+        col2.caption(f"ID: {escola.id}")
+        if col3.button("🗑️ Excluir", key=f"del_escola_{escola.id}", use_container_width=True):
+            profs = session.exec(select(Usuario).where(Usuario.escola_id == escola.id).where(Usuario.perfil == 'professor')).all()
+            if profs:
+                st.error(f"Escola possui {len(profs)} professor(es) vinculado(s).")
+            else:
+                session.delete(escola); session.commit(); st.rerun()
+        st.divider()
 
 elif menu == "Professores":
     st.header("👨‍🏫 Professores")
     escolas = session.exec(select(Escola)).all()
-    
     if not escolas:
         st.warning("⚠️ Cadastre uma escola antes de adicionar professores.")
     else:
         st.subheader("➕ Cadastrar novo professor")
         with st.form("np", clear_on_submit=True):
-            n = st.text_input("Nome completo", placeholder="Ex: Maria da Silva Santos")
-            u = st.text_input("Login de acesso", placeholder="Ex: maria.santos")
+            n = st.text_input("Nome completo")
+            u = st.text_input("Login de acesso")
             e = st.selectbox("Escola vinculada", escolas, format_func=lambda x: x.nome)
-            st.caption("A senha inicial será **123**. O professor poderá alterá-la no primeiro acesso.")
+            st.caption("Senha inicial: **123**")
             salvar = st.form_submit_button("💾 Cadastrar professor", type="primary", use_container_width=True)
             if salvar:
                 if n and u:
-                    existe = session.exec(select(Usuario).where(Usuario.username == u)).first()
-                    if existe:
-                        st.error("❌ Este login já está em uso. Escolha outro.")
+                    if session.exec(select(Usuario).where(Usuario.username == u)).first():
+                        st.error("❌ Login já em uso.")
                     else:
                         session.add(Usuario(nome=n, username=u, senha="123", perfil="professor", escola_id=e.id, criado_por_id=me.id))
-                        session.commit()
-                        st.success(f"Professor '{n}' cadastrado com sucesso!")
-                        st.rerun()
+                        session.commit(); st.success(f"Professor '{n}' cadastrado!"); st.rerun()
                 else:
-                    st.warning("Preencha o nome e o login antes de salvar.")
-    
+                    st.warning("Preencha nome e login.")
     st.divider()
     st.subheader("📋 Professores cadastrados")
-    
     profs = session.exec(select(Usuario).where(Usuario.perfil == 'professor')).all()
     if profs:
         escola_map = {e.id: e.nome for e in escolas}
         for prof in profs:
             col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-            with col1:
-                st.write(f"**{prof.nome}**")
-                st.caption(f"👤 @{prof.username}")
-            with col2:
-                st.write(f"🏫 {escola_map.get(prof.escola_id, '—')}")
-            with col3:
-                turmas_prof = session.exec(select(Turma).where(Turma.professor_id == prof.id)).all()
+            col1.write(f"**{prof.nome}**"); col1.caption(f"👤 @{prof.username}")
+            col2.write(f"🏫 {escola_map.get(prof.escola_id, '—')}")
+            turmas_prof = session.exec(select(Turma).where(Turma.professor_id == prof.id)).all()
+            col3.caption(f"📚 {len(turmas_prof)} turma(s)")
+            if col4.button("🗑️", key=f"del_prof_{prof.id}"):
                 if turmas_prof:
-                    st.caption(f"📚 {len(turmas_prof)} turma(s)")
+                    st.error(f"Professor possui {len(turmas_prof)} turma(s).")
                 else:
-                    st.caption("📚 Sem turmas")
-            with col4:
-                if st.button("🗑️", key=f"del_prof_{prof.id}", help="Excluir professor"):
-                    turmas_prof = session.exec(select(Turma).where(Turma.professor_id == prof.id)).all()
-                    if turmas_prof:
-                        st.error(f"Não é possível excluir o professor '{prof.nome}' pois ele possui {len(turmas_prof)} turma(s) vinculada(s).")
-                    else:
-                        session.delete(prof)
-                        session.commit()
-                        st.success(f"Professor '{prof.nome}' excluído com sucesso!")
-                        st.rerun()
+                    session.delete(prof); session.commit(); st.rerun()
             st.divider()
     else:
-        st.info("Nenhum professor cadastrado ainda.")
+        st.info("Nenhum professor cadastrado.")
 
 elif menu == "Turmas":
     st.header("🏫 Turmas")
-    
     if me.perfil == 'admin':
         st.subheader("➕ Criar nova turma")
+        professores_list = session.exec(select(Usuario).where(Usuario.perfil == 'professor')).all()
         with st.form("nt", clear_on_submit=True):
-            n = st.text_input("Nome da turma", placeholder="Ex: 3º Ano A — Contabilidade")
-            a = st.text_input("Ano letivo", value="2026", placeholder="Ex: 2026")
-            professor = st.selectbox("Professor responsável", 
-                                    session.exec(select(Usuario).where(Usuario.perfil == 'professor')).all(),
-                                    format_func=lambda x: x.nome)
-            salvar = st.form_submit_button("💾 Criar turma", type="primary", use_container_width=True)
+            n         = st.text_input("Nome da turma")
+            a         = st.text_input("Ano letivo", value="2026")
+            professor = st.selectbox("Professor responsável", professores_list, format_func=lambda x: x.nome)
+            salvar    = st.form_submit_button("💾 Criar turma", type="primary", use_container_width=True)
             if salvar:
                 if n and a:
                     session.add(Turma(nome=n, ano_letivo=a, professor_id=professor.id, escola_id=professor.escola_id or 1))
-                    session.commit()
-                    st.success(f"Turma '{n}' criada com sucesso!")
-                    st.rerun()
+                    session.commit(); st.success(f"Turma '{n}' criada!"); st.rerun()
                 else:
-                    st.warning("Preencha o nome e o ano letivo antes de salvar.")
-        
+                    st.warning("Preencha nome e ano letivo.")
         st.divider()
         st.subheader("📋 Turmas cadastradas")
         ts = session.exec(select(Turma)).all()
         if ts:
-            professores_map = {p.id: p.nome for p in session.exec(select(Usuario).where(Usuario.perfil == 'professor')).all()}
+            professores_map = {p.id: p.nome for p in professores_list}
             for turma in ts:
                 col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-                with col1:
-                    st.write(f"**{turma.nome}**")
-                    st.caption(f"📅 {turma.ano_letivo}")
-                with col2:
-                    st.write(f"👨‍🏫 {professores_map.get(turma.professor_id, '—')}")
-                with col3:
-                    alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == turma.id)).all()
-                    st.caption(f"🎓 {len(alunos_turma)} aluno(s)")
-                with col4:
-                    if st.button("🗑️", key=f"del_turma_{turma.id}", help="Excluir turma"):
-                        alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == turma.id)).all()
-                        if alunos_turma:
-                            st.error(f"Não é possível excluir a turma '{turma.nome}' pois existem {len(alunos_turma)} aluno(s) matriculado(s).")
-                        else:
-                            session.delete(turma)
-                            session.commit()
-                            st.success(f"Turma '{turma.nome}' excluída com sucesso!")
-                            st.rerun()
+                col1.write(f"**{turma.nome}**"); col1.caption(f"📅 {turma.ano_letivo}")
+                col2.write(f"👨‍🏫 {professores_map.get(turma.professor_id, '—')}")
+                alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == turma.id)).all()
+                col3.caption(f"🎓 {len(alunos_turma)} aluno(s)")
+                if col4.button("🗑️", key=f"del_turma_{turma.id}"):
+                    if alunos_turma:
+                        st.error(f"Turma possui {len(alunos_turma)} aluno(s).")
+                    else:
+                        session.delete(turma); session.commit(); st.rerun()
                 st.divider()
         else:
-            st.info("Nenhuma turma cadastrada ainda.")
-    
-    elif me.perfil == 'professor':
-        st.subheader("➕ Criar Nova Turma")
-        with st.form("nova_turma_professor", clear_on_submit=True):
-            n = st.text_input("Nome da turma", placeholder="Ex: 3º Ano A — Contabilidade")
-            a = st.text_input("Ano letivo", value="2026", placeholder="Ex: 2026")
-            salvar = st.form_submit_button("📌 Criar Turma", type="primary", use_container_width=True)
-            if salvar:
-                if n and a:
-                    session.add(Turma(nome=n, ano_letivo=a, professor_id=me.id, escola_id=me.escola_id or 1))
-                    session.commit()
-                    st.success(f"Turma '{n}' criada com sucesso!")
-                    st.rerun()
-                else:
-                    st.warning("Preencha o nome e o ano letivo antes de salvar.")
-        
-        st.divider()
-        st.subheader("📚 Suas Turmas")
-        minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        if minhas_turmas:
-            for t in minhas_turmas:
-                col1, col2, col3 = st.columns([3, 2, 1])
-                with col1:
-                    st.write(f"**{t.nome}**")
-                    st.caption(f"📅 {t.ano_letivo}")
-                with col2:
-                    alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == t.id)).all()
-                    st.metric("Alunos", len(alunos_turma))
-                with col3:
-                    if st.button("🗑️ Excluir", key=f"del_turma_{t.id}", use_container_width=True):
-                        alunos_turma = session.exec(select(Usuario).where(Usuario.turma_id == t.id)).all()
-                        if alunos_turma:
-                            st.error(f"Não é possível excluir a turma '{t.nome}' pois existem {len(alunos_turma)} aluno(s) matriculado(s).")
-                        else:
-                            session.delete(t)
-                            session.commit()
-                            st.success(f"Turma '{t.nome}' excluída com sucesso!")
-                            st.rerun()
-                st.divider()
-        else:
-            st.info("Você ainda não tem turmas criadas. Crie uma usando o formulário acima!")
+            st.info("Nenhuma turma cadastrada.")
     else:
         st.warning("Esta seção não está disponível para seu perfil.")
 
 elif menu == "Alunos":
     st.header("🎓 Alunos")
     turmas = session.exec(select(Turma)).all()
-    
-    if me.perfil == 'admin':
+    if me.perfil in ('admin', 'professor'):
+        if me.perfil == 'professor':
+            turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
         if not turmas:
             st.warning("⚠️ Cadastre uma turma antes de matricular alunos.")
         else:
             st.subheader("➕ Matricular novo aluno")
             with st.form("na", clear_on_submit=True):
-                n = st.text_input("Nome completo do aluno", placeholder="Ex: João Pedro Oliveira")
-                u = st.text_input("Login de acesso", placeholder="Ex: joao.pedro")
+                n = st.text_input("Nome completo do aluno")
+                u = st.text_input("Login de acesso")
                 t = st.selectbox("Turma", turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                st.caption("A senha inicial será **123**. O aluno poderá alterá-la no primeiro acesso.")
+                st.caption("Senha inicial: **123**")
                 salvar = st.form_submit_button("💾 Matricular aluno", type="primary", use_container_width=True)
                 if salvar:
                     if n and u:
-                        existe = session.exec(select(Usuario).where(Usuario.username == u)).first()
-                        if existe:
-                            st.error("❌ Este login já está em uso. Escolha outro.")
+                        if session.exec(select(Usuario).where(Usuario.username == u)).first():
+                            st.error("❌ Login já em uso.")
                         else:
                             session.add(Usuario(nome=n, username=u, senha="123", perfil="aluno", turma_id=t.id, criado_por_id=me.id))
-                            session.commit()
-                            st.success(f"Aluno '{n}' matriculado com sucesso!")
-                            st.rerun()
+                            session.commit(); st.success(f"Aluno '{n}' matriculado!"); st.rerun()
                     else:
-                        st.warning("Preencha o nome e o login antes de salvar.")
-            
+                        st.warning("Preencha nome e login.")
             st.divider()
             st.subheader("📋 Alunos matriculados")
-            alunos = session.exec(select(Usuario).where(Usuario.perfil == 'aluno')).all()
-            if alunos:
-                turma_map = {t.id: f"{t.nome} ({t.ano_letivo})" for t in turmas}
-                for aluno in alunos:
-                    col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-                    with col1:
-                        st.write(f"**{aluno.nome}**")
-                        st.caption(f"👤 @{aluno.username}")
-                    with col2:
-                        st.write(f"📚 {turma_map.get(aluno.turma_id, '—')}")
-                    with col3:
-                        st.caption(f"📅 {aluno.data_criacao}")
-                    with col4:
-                        if st.button("🗑️", key=f"del_aluno_{aluno.id}", help="Excluir aluno"):
-                            lancamentos_aluno = session.exec(select(Lancamento).where(Lancamento.usuario_id == aluno.id)).all()
-                            if lancamentos_aluno:
-                                st.warning(f"O aluno '{aluno.nome}' possui {len(lancamentos_aluno)} lançamento(s). Eles também serão excluídos.")
-                                for lanc in lancamentos_aluno:
-                                    session.delete(lanc)
-                            session.delete(aluno)
-                            session.commit()
-                            st.success(f"Aluno '{aluno.nome}' excluído com sucesso!")
-                            st.rerun()
-                    st.divider()
-            else:
-                st.info("Nenhum aluno matriculado ainda.")
-    
-    elif me.perfil == 'professor':
-        minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        
-        if not minhas_turmas:
-            st.error("Você não tem turmas criadas ainda. Crie uma turma em 'Minhas Turmas' primeiro!")
-        else:
-            st.subheader("➕ Matricular Novo Aluno")
-            with st.form("matricular_aluno_professor", clear_on_submit=True):
-                n = st.text_input("Nome completo do aluno", placeholder="Ex: João Pedro Oliveira")
-                u = st.text_input("Login de acesso", placeholder="Ex: joao.pedro")
-                t = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                st.caption("A senha inicial será **123**. O aluno poderá alterá-la no primeiro acesso.")
-                salvar = st.form_submit_button("✅ Matricular Aluno", type="primary", use_container_width=True)
-                if salvar:
-                    if n and u:
-                        existe = session.exec(select(Usuario).where(Usuario.username == u)).first()
-                        if existe:
-                            st.error("❌ Este login já está em uso. Escolha outro.")
-                        else:
-                            session.add(Usuario(nome=n, username=u, senha="123", perfil="aluno", turma_id=t.id, criado_por_id=me.id))
-                            session.commit()
-                            st.success(f"Aluno '{n}' matriculado com sucesso!")
-                            st.rerun()
-                    else:
-                        st.warning("Preencha o nome e o login antes de salvar.")
-            
-            st.divider()
-            st.subheader("📋 Seus Alunos")
-            turmas_dict = {t.id: t.nome for t in minhas_turmas}
-            alunos = session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()
-            
+            turma_map = {t.id: f"{t.nome} ({t.ano_letivo})" for t in turmas}
+            alunos = session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in turmas]))).all()
             if alunos:
                 for aluno in alunos:
                     col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-                    with col1:
-                        st.write(f"**{aluno.nome}**")
-                        st.caption(f"👤 @{aluno.username}")
-                    with col2:
-                        st.write(f"📚 {turmas_dict.get(aluno.turma_id, '—')}")
-                    with col3:
-                        st.caption(f"⭐ XP: {aluno.xp}")
-                    with col4:
-                        if st.button("🗑️", key=f"del_aluno_{aluno.id}", help="Excluir aluno"):
-                            lancamentos_aluno = session.exec(select(Lancamento).where(Lancamento.usuario_id == aluno.id)).all()
-                            if lancamentos_aluno:
-                                st.warning(f"O aluno '{aluno.nome}' possui {len(lancamentos_aluno)} lançamento(s). Eles também serão excluídos.")
-                                for lanc in lancamentos_aluno:
-                                    session.delete(lanc)
-                            session.delete(aluno)
-                            session.commit()
-                            st.success(f"Aluno '{aluno.nome}' excluído com sucesso!")
-                            st.rerun()
+                    col1.write(f"**{aluno.nome}**"); col1.caption(f"👤 @{aluno.username}")
+                    col2.write(f"📚 {turma_map.get(aluno.turma_id, '—')}")
+                    col3.caption(f"📅 {aluno.data_criacao}")
+                    if col4.button("🗑️", key=f"del_aluno_{aluno.id}"):
+                        for lanc in session.exec(select(Lancamento).where(Lancamento.usuario_id == aluno.id)).all():
+                            session.delete(lanc)
+                        session.delete(aluno); session.commit(); st.rerun()
                     st.divider()
             else:
-                st.info("Nenhum aluno matriculado em suas turmas. Use o formulário acima para adicionar alunos!")
+                st.info("Nenhum aluno matriculado.")
     else:
         st.warning("Esta seção é apenas para administradores e professores.")
 
@@ -1316,7 +1117,7 @@ elif menu == "Escrituração e Diário":
     with st.form("lanc", clear_on_submit=True):
         ce, cd = st.columns(2)
         with ce:
-            d = st.date_input("Data", value=date.today())
+            d  = st.date_input("Data", value=date.today())
             db = st.selectbox("Débito", contas, index=None)
             cr = st.selectbox("Crédito", contas, index=None)
         with cd:
@@ -1328,10 +1129,9 @@ elif menu == "Escrituração e Diário":
             session.add(Lancamento(data_lancamento=d, valor=v, historico=h,
                 conta_debito=db.split(" - ")[0], conta_credito=cr.split(" - ")[0],
                 usuario_id=me.id))
-            session.commit()
-            st.success("Lançamento gravado!"); st.rerun()
+            session.commit(); st.success("Lançamento gravado!"); st.rerun()
         else:
-            st.warning("Selecione as contas de Débito e Crédito antes de gravar.")
+            st.warning("Selecione as contas de Débito e Crédito.")
 
     lancs = session.exec(select(Lancamento).where(Lancamento.usuario_id == me.id)).all()
     if lancs:
@@ -1349,7 +1149,7 @@ elif menu == "Escrituração e Diário":
             cols[2].markdown(f"<div style='font-size:0.78em;padding:4px 0;color:#27ae60;'>{l.conta_credito} - {mapa_nomes.get(l.conta_credito, l.conta_credito)}</div>", unsafe_allow_html=True)
             cols[3].markdown(f"<div style='font-size:0.8em;padding:4px 0;font-weight:600;'>{fmt_moeda(l.valor)}</div>", unsafe_allow_html=True)
             cols[4].markdown(f"<div style='font-size:0.78em;padding:4px 0;color:#555;'>{l.historico or '—'}</div>", unsafe_allow_html=True)
-            if cols[5].button("🗑️", key=f"del_{l.id}", help="Excluir lançamento"):
+            if cols[5].button("🗑️", key=f"del_{l.id}"):
                 session.delete(session.get(Lancamento, l.id)); session.commit(); st.rerun()
     botao_imprimir(menu, me, session)
 
@@ -1376,65 +1176,286 @@ elif menu == "Balancete":
     st.header("⚖️ Balancete")
     mov = calcular_movimentacao(me.id)
     if mov:
-        st.dataframe(pd.DataFrame([{"Conta": f"{k} - {v['nome']}", "Débito": v['total_debito'], "Crédito": v['total_credito'], "Saldo": v['saldo']} for k, v in mov.items()]), use_container_width=True, hide_index=True)
+        # Prepara dados para tabela
+        dados_tabela = []
+        total_debito = 0
+        total_credito = 0
+        
+        for k, v in sorted(mov.items()):
+            dados_tabela.append({
+                "Conta": f"{k} - {v['nome']}",
+                "Débito": v['total_debito'],
+                "Crédito": v['total_credito'],
+                "Saldo": v['saldo']
+            })
+            total_debito += v['total_debito']
+            total_credito += v['total_credito']
+        
+        df = pd.DataFrame(dados_tabela)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # Exibe totais em cards
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"""
+            <div class='total-card'>
+                <h3>💰 TOTAL DÉBITOS</h3>
+                <div class='valor'>{fmt_moeda(total_debito)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class='total-card'>
+                <h3>💰 TOTAL CRÉDITOS</h3>
+                <div class='valor'>{fmt_moeda(total_credito)}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            diferenca = total_debito - total_credito
+            cor = "#27ae60" if abs(diferenca) < 0.01 else "#c0392b"
+            st.markdown(f"""
+            <div class='total-card' style='background: linear-gradient(135deg, #2c3e50, #34495e);'>
+                <h3>📊 DIFERENÇA</h3>
+                <div class='valor' style='color:{cor};'>{fmt_moeda(abs(diferenca))}</div>
+                <small style='color:white;'>{"✅ EQUILIBRADO" if abs(diferenca) < 0.01 else "⚠️ DESEQUILIBRADO"}</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        if abs(total_debito - total_credito) > 0.01:
+            st.warning("⚠️ O balancete está desequilibrado! Verifique seus lançamentos.")
+        else:
+            st.success("✅ Balancete equilibrado! Os débitos e créditos estão balanceados.")
+    else:
+        st.info("Nenhuma movimentação encontrada. Registre lançamentos para visualizar o balancete.")
+    
     botao_imprimir(menu, me, session)
 
 elif menu == "DRE":
     st.header("📉 Demonstração do Resultado do Exercício")
-    mov = calcular_movimentacao(me.id)
-    rec_bruta_v = deducoes_v = rec_financ_v = custos_v = despesas_v = desp_financ_v = 0.0
-    linhas_rec_bruta = []; linhas_deducoes = []; linhas_custos = []
-    linhas_despesas = []; linhas_rec_fin = []; linhas_desp_fin = []
-
-    for conta, d in mov.items():
-        s = d['saldo']
-        nome = f"{conta} - {d['nome']}"
-        if conta.startswith('3.1'):
-            rec_bruta_v += s; linhas_rec_bruta.append((nome, s))
-        elif conta.startswith('3.2'):
-            deducoes_v += s; linhas_deducoes.append((nome, s * -1))
-        elif conta.startswith('3.3'):
-            rec_financ_v += s; linhas_rec_fin.append((nome, s))
-        elif conta.startswith('4'):
-            custos_v += s; linhas_custos.append((nome, s * -1))
-        elif conta.startswith('5'):
-            despesas_v += s; linhas_despesas.append((nome, s * -1))
-        elif conta.startswith('6.1'):
-            desp_financ_v += s; linhas_desp_fin.append((nome, s * -1))
-
-    rec_liquida = rec_bruta_v - deducoes_v
-    lucro_bruto = rec_liquida - custos_v
-    res_op = lucro_bruto - despesas_v
-    res_liq = res_op + rec_financ_v - desp_financ_v
-
-    def bloco_dre(titulo, linhas, subtotal):
-        rows = f"<tr><td colspan='2' style='background:#e8f0fe;font-weight:700;font-size:0.82em;padding:7px 10px;color:#004b8d;border-top:2px solid #c5d8f6;'>{titulo}</td></table>"
-        for nome, val in linhas:
-            cor_val = "#c0392b" if val < 0 else "#222"
-            rows += f"<tr><td style='padding:4px 10px 4px 20px;font-size:0.8em;color:#444;'>{nome}</td><td style='text-align:right;padding:4px 10px;font-size:0.8em;color:{cor_val};white-space:nowrap;'>{fmt_moeda(val)}</td>"
-        cor_sub = "#27ae60" if subtotal >= 0 else "#c0392b"
-        rows += f"<tr style='background:#f0f4fb;'><td style='text-align:right;padding:3px 10px;font-size:0.78em;color:#555;font-style:italic;'>Subtotal</td><td style='text-align:right;padding:3px 10px;font-size:0.8em;font-weight:600;color:{cor_sub};white-space:nowrap;border-top:1px solid #c5d8f6;'>{fmt_moeda(subtotal)}</tr>"
-        return rows
-
-    def linha_resultado(label, valor):
-        cor = "#27ae60" if valor >= 0 else "#c0392b"
-        return f"<tr style='background:#dbeafe;'><td style='padding:6px 10px;font-size:0.83em;font-weight:700;color:#1e40af;'>{label}</td><td style='text-align:right;padding:6px 10px;font-size:0.85em;font-weight:700;color:{cor};white-space:nowrap;'>{fmt_moeda(valor)}</td>"
-
-    rows = ""
-    rows += bloco_dre("(+) Receita Operacional Bruta", linhas_rec_bruta, rec_bruta_v)
-    rows += bloco_dre("(-) Deduções da Receita", linhas_deducoes, deducoes_v * -1)
-    rows += linha_resultado("(=) Receita Operacional Líquida", rec_liquida)
-    rows += bloco_dre("(-) Custos (CMV / CSP)", linhas_custos, custos_v * -1)
-    rows += linha_resultado("(=) Lucro Bruto", lucro_bruto)
-    rows += bloco_dre("(-) Despesas Operacionais", linhas_despesas, despesas_v * -1)
-    rows += bloco_dre("(+) Receitas Financeiras", linhas_rec_fin, rec_financ_v)
-    rows += bloco_dre("(-) Despesas Financeiras", linhas_desp_fin, desp_financ_v * -1)
-
-    cor_rf = "#27ae60" if res_liq >= 0 else "#c0392b"
-    label_final = "LUCRO LÍQUIDO DO EXERCÍCIO" if res_liq >= 0 else "PREJUÍZO DO EXERCÍCIO"
-    rows += f"<tr style='background:#004b8d;'><td style='padding:9px 10px;font-size:0.86em;font-weight:700;color:white;'>(=) {label_final}</td><td style='text-align:right;padding:9px 10px;font-size:0.9em;font-weight:700;color:white;white-space:nowrap;'>{fmt_moeda(res_liq)}</td>"
-
-    st.markdown(f"<table style='width:100%;border-collapse:collapse;border:1px solid #dde4f0;border-radius:8px;overflow:hidden;'>{rows}</table>", unsafe_allow_html=True)
+    
+    with st.spinner("🔄 Calculando DRE..."):
+        mov = calcular_movimentacao(me.id)
+    
+    # Acumula valores por categoria
+    receitas = 0
+    deducoes = 0
+    custos = 0
+    despesas = 0
+    receitas_fin = 0
+    despesas_fin = 0
+    
+    detalhes_receitas = []
+    detalhes_deducoes = []
+    detalhes_custos = []
+    detalhes_despesas = []
+    detalhes_receitas_fin = []
+    detalhes_despesas_fin = []
+    
+    for codigo, dados in mov.items():
+        saldo = dados['saldo']
+        nome = f"{codigo} - {dados['nome']}"
+        
+        if codigo.startswith('3.1'):
+            receitas += saldo
+            if saldo != 0:
+                detalhes_receitas.append((nome, saldo))
+        elif codigo.startswith('3.2'):
+            deducoes += abs(saldo)
+            if saldo != 0:
+                detalhes_deducoes.append((nome, saldo))
+        elif codigo.startswith('3.3'):
+            receitas_fin += saldo
+            if saldo != 0:
+                detalhes_receitas_fin.append((nome, saldo))
+        elif codigo.startswith('4'):
+            custos += abs(saldo)
+            if saldo != 0:
+                detalhes_custos.append((nome, saldo))
+        elif codigo.startswith('5'):
+            despesas += abs(saldo)
+            if saldo != 0:
+                detalhes_despesas.append((nome, saldo))
+        elif codigo.startswith('6.1'):
+            despesas_fin += abs(saldo)
+            if saldo != 0:
+                detalhes_despesas_fin.append((nome, saldo))
+    
+    # Cálculos
+    receita_liquida = receitas - deducoes
+    lucro_bruto = receita_liquida - custos
+    resultado_op = lucro_bruto - despesas
+    resultado_final = resultado_op + receitas_fin - despesas_fin
+    
+    # CSS da DRE
+    st.markdown("""
+    <style>
+        .dre-card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin: 20px auto;
+            max-width: 800px;
+        }
+        .dre-header {
+            background: linear-gradient(135deg, #004b8d, #0066c0);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .dre-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        .dre-body {
+            padding: 20px;
+        }
+        .dre-section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eef2f5;
+            padding-bottom: 15px;
+        }
+        .dre-section-title {
+            font-weight: 700;
+            color: #004b8d;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .dre-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0 6px 15px;
+            font-size: 0.85rem;
+        }
+        .dre-row-positive {
+            color: #27ae60;
+        }
+        .dre-row-negative {
+            color: #c0392b;
+        }
+        .dre-subtotal {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 15px;
+            font-weight: 600;
+            background: #f8fafc;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+        .dre-line-result {
+            background: #e8f5e9;
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin: 12px 0;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+        }
+        .dre-highlight {
+            background: linear-gradient(135deg, #e8f4f8, #d4eaf4);
+            padding: 20px;
+            text-align: center;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        .dre-highlight-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #004b8d;
+        }
+        .dre-highlight-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 5px;
+        }
+        .dre-highlight-value.positive { color: #27ae60; }
+        .dre-highlight-value.negative { color: #c0392b; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Construção do HTML
+    html = f"""
+    <div class="dre-card">
+        <div class="dre-header">
+        </div>
+        <div class="dre-body">
+    """
+    
+    # Receitas
+    if detalhes_receitas:
+        html += '<div class="dre-section"><div class="dre-section-title">📈 RECEITA OPERACIONAL BRUTA</div>'
+        for nome, val in detalhes_receitas:
+            html += f'<div class="dre-row dre-row-positive"><span>{nome}</span><span>R$ {val:,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Subtotal</span><span>R$ {receitas:,.2f}</span></div></div>'
+    else:
+        html += f'<div class="dre-section"><div class="dre-section-title">📈 RECEITA OPERACIONAL BRUTA</div><div class="dre-row">R$ {receitas:,.2f}</div></div>'
+    
+    # Deduções
+    if detalhes_deducoes:
+        html += '<div class="dre-section"><div class="dre-section-title">📉 DEDUÇÕES DA RECEITA</div>'
+        for nome, val in detalhes_deducoes:
+            html += f'<div class="dre-row dre-row-negative"><span>{nome}</span><span>R$ {abs(val):,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Total das Deduções</span><span>R$ {deducoes:,.2f}</span></div></div>'
+    
+    # Receita Líquida
+    cor_rl = "#27ae60" if receita_liquida >= 0 else "#c0392b"
+    html += f'<div class="dre-line-result" style="background:#e3f2fd;"><span>(=) RECEITA OPERACIONAL LÍQUIDA</span><span style="color:{cor_rl};">R$ {receita_liquida:,.2f}</span></div>'
+    
+    # Custos
+    if detalhes_custos:
+        html += '<div class="dre-section"><div class="dre-section-title">🏭 CUSTOS OPERACIONAIS</div>'
+        for nome, val in detalhes_custos:
+            html += f'<div class="dre-row dre-row-negative"><span>{nome}</span><span>R$ {abs(val):,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Total dos Custos</span><span>R$ {custos:,.2f}</span></div></div>'
+    
+    # Lucro Bruto
+    cor_lb = "#27ae60" if lucro_bruto >= 0 else "#c0392b"
+    html += f'<div class="dre-line-result" style="background:#e8f5e9;"><span>(=) LUCRO BRUTO</span><span style="color:{cor_lb};">R$ {lucro_bruto:,.2f}</span></div>'
+    
+    # Despesas
+    if detalhes_despesas:
+        html += '<div class="dre-section"><div class="dre-section-title">💼 DESPESAS OPERACIONAIS</div>'
+        for nome, val in detalhes_despesas:
+            html += f'<div class="dre-row dre-row-negative"><span>{nome}</span><span>R$ {abs(val):,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Total das Despesas</span><span>R$ {despesas:,.2f}</span></div></div>'
+    
+    # Resultado Operacional
+    cor_ro = "#27ae60" if resultado_op >= 0 else "#c0392b"
+    html += f'<div class="dre-line-result" style="background:#fff3e0;"><span>(=) RESULTADO OPERACIONAL</span><span style="color:{cor_ro};">R$ {resultado_op:,.2f}</span></div>'
+    
+    # Receitas Financeiras
+    if detalhes_receitas_fin:
+        html += '<div class="dre-section"><div class="dre-section-title">💰 RECEITAS FINANCEIRAS</div>'
+        for nome, val in detalhes_receitas_fin:
+            html += f'<div class="dre-row dre-row-positive"><span>{nome}</span><span>R$ {val:,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Total</span><span>R$ {receitas_fin:,.2f}</span></div></div>'
+    
+    # Despesas Financeiras
+    if detalhes_despesas_fin:
+        html += '<div class="dre-section"><div class="dre-section-title">💸 DESPESAS FINANCEIRAS</div>'
+        for nome, val in detalhes_despesas_fin:
+            html += f'<div class="dre-row dre-row-negative"><span>{nome}</span><span>R$ {abs(val):,.2f}</span></div>'
+        html += f'<div class="dre-subtotal"><span>Total</span><span>R$ {despesas_fin:,.2f}</span></div></div>'
+    
+    # Resultado Final
+    classe_final = "positive" if resultado_final >= 0 else "negative"
+    texto_final = "LUCRO LÍQUIDO DO EXERCÍCIO" if resultado_final >= 0 else "PREJUÍZO DO EXERCÍCIO"
+    
+    html += f"""
+            <div class="dre-highlight">
+                <div class="dre-highlight-label">(=) {texto_final}</div>
+                <div class="dre-highlight-value {classe_final}">R$ {abs(resultado_final):,.2f}</div>
+            </div>
+        </div>
+    </div>
+    """
+    
+    st.markdown(html, unsafe_allow_html=True)
     botao_imprimir(menu, me, session)
 
 elif menu == "Balanço":
@@ -1446,13 +1467,13 @@ elif menu == "Balanço":
         for pfx in sorted(grupos.keys()):
             linhas = grupos[pfx]
             if not linhas: continue
-            subtotal = sum(l["Saldo"] for l in linhas)
+            subtotal   = sum(l["Saldo"] for l in linhas)
             nome_grupo = nomes_grupos.get(pfx, pfx)
             rows += f"<tr><td colspan='2' style='background:#e8f0fe;font-weight:700;font-size:0.82em;padding:6px 10px;color:#004b8d;border-top:2px solid #c5d8f6;'>{nome_grupo}</td></tr>"
             for l in linhas:
-                rows += f"<tr><td style='padding:4px 10px 4px 20px;font-size:0.8em;color:#444;'>{l['Conta']}</td><td style='text-align:right;padding:4px 10px;font-size:0.8em;color:#222;white-space:nowrap;'>{fmt_moeda(l['Saldo'])}</td>"
-            rows += f"<tr style='background:#f0f4fb;'><td style='text-align:right;padding:3px 10px;font-size:0.78em;color:#555;font-style:italic;'>Subtotal</td><td style='text-align:right;padding:3px 10px;font-size:0.8em;font-weight:700;color:#004b8d;white-space:nowrap;border-top:1px solid #c5d8f6;'>{fmt_moeda(subtotal)}</td>"
-        rows += f"<tr style='background:#004b8d;'><td style='padding:8px 10px;font-size:0.85em;font-weight:700;color:white;'>TOTAL GERAL</td><td style='text-align:right;padding:8px 10px;font-size:0.88em;font-weight:700;color:white;white-space:nowrap;'>{fmt_moeda(total_geral)}</td>"
+                rows += f"<tr><td style='padding:4px 10px 4px 20px;font-size:0.8em;color:#444;'>{l['Conta']}</td><td style='text-align:right;padding:4px 10px;font-size:0.8em;color:#222;white-space:nowrap;'>{fmt_moeda(l['Saldo'])}</td></tr>"
+            rows += f"<tr style='background:#f0f4fb;'><td style='text-align:right;padding:3px 10px;font-size:0.78em;color:#555;font-style:italic;'>Subtotal</td><td style='text-align:right;padding:3px 10px;font-size:0.8em;font-weight:700;color:#004b8d;white-space:nowrap;border-top:1px solid #c5d8f6;'>{fmt_moeda(subtotal)}</td></tr>"
+        rows += f"<tr style='background:#004b8d;'><td style='padding:8px 10px;font-size:0.85em;font-weight:700;color:white;'>TOTAL GERAL</td><td style='text-align:right;padding:8px 10px;font-size:0.88em;font-weight:700;color:white;white-space:nowrap;'>{fmt_moeda(total_geral)}</td></tr>"
         return f"<table style='width:100%;border-collapse:collapse;border:1px solid #dde4f0;border-radius:8px;overflow:hidden;'>{rows}</table>"
 
     c1, c2 = st.columns(2)
