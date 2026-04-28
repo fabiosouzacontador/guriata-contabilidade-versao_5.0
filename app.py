@@ -36,7 +36,7 @@ st.set_page_config(
 )
 
 # ==============================================================================
-# FUNÇÕES DE FORMATAÇÃO DE DATA
+# FUNÇÕES DE FORMATAÇÃO
 # ==============================================================================
 def formatar_data_br(data):
     """Converte date para string no formato DD/MM/AAAA"""
@@ -44,9 +44,8 @@ def formatar_data_br(data):
         return data.strftime('%d/%m/%Y')
     return ""
 
-def parse_data_br(data_str):
-    """Converte string DD/MM/AAAA para date"""
-    return datetime.strptime(data_str, '%d/%m/%Y').date()
+def fmt_moeda(v):
+    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ==============================================================================
 # FUNÇÕES DE SEGURANÇA PARA SENHAS
@@ -122,15 +121,8 @@ st.markdown("""
         text-align: center;
         margin-top: 20px;
     }
-    .total-card h3 {
-        margin: 0;
-        font-size: 1rem;
-    }
-    .total-card .valor {
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin-top: 5px;
-    }
+    .total-card h3 { margin: 0; font-size: 1rem; }
+    .total-card .valor { font-size: 1.5rem; font-weight: bold; margin-top: 5px; }
     @media print {
         [data-testid="stSidebar"] { display: none; }
         .stButton, .stForm, .stSelectbox, .stTextInput, .stNumberInput, .stDateInput, .stTextArea { display: none !important; }
@@ -178,10 +170,15 @@ def botao_imprimir(menu, me, session):
 
 def gerar_html_impressao(menu, me, session):
     def tabela_html(cabecalhos, linhas):
-        html_t = "<table>"
-        html_t += "<tr>" + "".join(f"<th>{h}</th>" for h in cabecalhos) + "</tr>"
+        html_t = "table"
+        for h in cabecalhos:
+            html_t += f"<th>{h}</th>"
+        html_t += "tr"
         for linha in linhas:
-            html_t += "<tr>" + "".join(f" looked{v}Nine" for v in linha) + "</tr>"
+            html_t += "<tr>"
+            for v in linha:
+                html_t += f" looks{v}Nine"
+            html_t += "</tr>"
         html_t += "</table>"
         return html_t
 
@@ -330,7 +327,7 @@ def gerar_html_impressao(menu, me, session):
     return html
 
 # ==============================================================================
-# 2. BANCO DE DADOS & PLANO DE CONTAS MASTER (Neon PostgreSQL)
+# 2. BANCO DE DADOS & PLANO DE CONTAS MASTER
 # ==============================================================================
 DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
@@ -469,9 +466,6 @@ inicializar_banco()
 # ==============================================================================
 # 3. LÓGICA CONTÁBIL
 # ==============================================================================
-def fmt_moeda(v):
-    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
 def get_mapa_nomes():
     return {c.codigo: c.nome for c in get_session().exec(select(ContaContabil)).all()}
 
@@ -482,8 +476,8 @@ def calcular_movimentacao(uid):
     s = get_session()
     lancs = s.exec(select(Lancamento).where(Lancamento.usuario_id == uid)).all()
     dados = {}
-    mapa_nat  = {c.codigo: c.natureza for c in s.exec(select(ContaContabil)).all()}
-    mapa_nome = {c.codigo: c.nome     for c in s.exec(select(ContaContabil)).all()}
+    mapa_nat = {c.codigo: c.natureza for c in s.exec(select(ContaContabil)).all()}
+    mapa_nome = get_mapa_nomes()
     for l in lancs:
         if l.conta_debito not in dados:
             dados[l.conta_debito] = {'deb': 0.0, 'cred': 0.0}
@@ -493,52 +487,90 @@ def calcular_movimentacao(uid):
         dados[l.conta_credito]['cred'] += l.valor
     resultado = {}
     for k, v in dados.items():
-        nat   = mapa_nat.get(k, 'D')
+        nat = mapa_nat.get(k, 'D')
         saldo = v['deb'] - v['cred'] if nat == 'D' else v['cred'] - v['deb']
         resultado[k] = {
-            'nome':          mapa_nome.get(k, k),
-            'natureza':      nat,
-            'total_debito':  v['deb'],
+            'nome': mapa_nome.get(k, k),
+            'natureza': nat,
+            'total_debito': v['deb'],
             'total_credito': v['cred'],
-            'saldo':         saldo
+            'saldo': saldo
         }
+    return resultado
+
+def calcular_movimentacao_detalhada(uid):
+    """Retorna movimentação detalhada por lançamento para os razonetes"""
+    s = get_session()
+    lancamentos = s.exec(
+        select(Lancamento).where(Lancamento.usuario_id == uid)
+        .order_by(Lancamento.data_lancamento)
+    ).all()
+    
+    mapa_nome = get_mapa_nomes()
+    resultado = {}
+    
+    for lanc in lancamentos:
+        # Processa conta de débito
+        if lanc.conta_debito not in resultado:
+            resultado[lanc.conta_debito] = {
+                'nome': mapa_nome.get(lanc.conta_debito, lanc.conta_debito),
+                'lancamentos': []
+            }
+        resultado[lanc.conta_debito]['lancamentos'].append({
+            'data': lanc.data_lancamento,
+            'tipo': 'D',
+            'valor': lanc.valor,
+            'historico': lanc.historico,
+            'conta_contrapartida': lanc.conta_credito
+        })
+        
+        # Processa conta de crédito
+        if lanc.conta_credito not in resultado:
+            resultado[lanc.conta_credito] = {
+                'nome': mapa_nome.get(lanc.conta_credito, lanc.conta_credito),
+                'lancamentos': []
+            }
+        resultado[lanc.conta_credito]['lancamentos'].append({
+            'data': lanc.data_lancamento,
+            'tipo': 'C',
+            'valor': lanc.valor,
+            'historico': lanc.historico,
+            'conta_contrapartida': lanc.conta_debito
+        })
+    
+    # Calcula saldos acumulados
+    for conta in resultado:
+        saldo = 0
+        for i, lanc in enumerate(resultado[conta]['lancamentos']):
+            if lanc['tipo'] == 'D':
+                saldo += lanc['valor']
+            else:
+                saldo -= lanc['valor']
+            resultado[conta]['lancamentos'][i]['saldo_parcial'] = saldo
+        resultado[conta]['saldo_final'] = saldo
+        resultado[conta]['natureza'] = 'Devedora' if saldo >= 0 else 'Credora'
+    
     return resultado
 
 def gerar_demonstrativos(uid):
     mov = calcular_movimentacao(uid)
-    rec_bruta    = 0.0
-    deducoes     = 0.0
-    custos       = 0.0
-    despesas_op  = 0.0
-    rec_financ   = 0.0
-    desp_financ  = 0.0
-    ativo_total  = 0.0
-    passivo_total = 0.0
-
-    grupos_ativo   = {"1.1": [], "1.2.1": [], "1.2.3": [], "1.2.4": []}
+    rec_bruta = deducoes = custos = despesas_op = rec_financ = desp_financ = 0.0
+    ativo_total = passivo_total = 0.0
+    grupos_ativo = {"1.1": [], "1.2.1": [], "1.2.3": [], "1.2.4": []}
     grupos_passivo = {"2.1": [], "2.2": [], "2.3": []}
-    nomes_grupos_a = {
-        "1.1":   "Ativo Circulante",
-        "1.2.1": "Realizável a Longo Prazo",
-        "1.2.3": "Imobilizado",
-        "1.2.4": "Intangível"
-    }
-    nomes_grupos_p = {
-        "2.1": "Passivo Circulante",
-        "2.2": "Passivo Não Circulante",
-        "2.3": "Patrimônio Líquido"
-    }
+    nomes_grupos_a = {"1.1": "Ativo Circulante", "1.2.1": "Realizável a Longo Prazo", "1.2.3": "Imobilizado", "1.2.4": "Intangível"}
+    nomes_grupos_p = {"2.1": "Passivo Circulante", "2.2": "Passivo Não Circulante", "2.3": "Patrimônio Líquido"}
 
     for conta, d in mov.items():
         saldo = d['saldo']
         if conta.startswith('3.1'):
-            rec_bruta   += saldo
+            rec_bruta += saldo
         elif conta.startswith('3.2'):
-            deducoes    += saldo
+            deducoes += saldo
         elif conta.startswith('3.3'):
-            rec_financ  += saldo
+            rec_financ += saldo
         elif conta.startswith('4'):
-            custos      += saldo
+            custos += saldo
         elif conta.startswith('5'):
             despesas_op += saldo
         elif conta.startswith('6.1'):
@@ -562,24 +594,24 @@ def gerar_demonstrativos(uid):
             if not encaixou:
                 grupos_passivo["2.1"].append(linha)
 
-    rec_liquida      = rec_bruta - deducoes
-    lucro_bruto      = rec_liquida - custos
-    res_operacional  = lucro_bruto - despesas_op
-    res_liquido      = res_operacional + rec_financ - desp_financ
+    rec_liquida = rec_bruta - deducoes
+    lucro_bruto = rec_liquida - custos
+    res_operacional = lucro_bruto - despesas_op
+    res_liquido = res_operacional + rec_financ - desp_financ
 
     if res_liquido != 0:
         passivo_total += res_liquido
         grupos_passivo["2.3"].append({"Conta": "Resultado do Exercício", "Saldo": res_liquido})
 
     dre_rows = [
-        {"Descrição": "(=) Receita Operacional Bruta",      "Valor": fmt_moeda(rec_bruta)},
-        {"Descrição": "(-) Deduções da Receita",            "Valor": fmt_moeda(deducoes * -1)},
-        {"Descrição": "(=) Receita Operacional Líquida",    "Valor": fmt_moeda(rec_liquida)},
-        {"Descrição": "(-) Custos (CMV/CSP)",               "Valor": fmt_moeda(custos * -1)},
-        {"Descrição": "(=) Lucro Bruto",                    "Valor": fmt_moeda(lucro_bruto)},
-        {"Descrição": "(-) Despesas Operacionais",          "Valor": fmt_moeda(despesas_op * -1)},
-        {"Descrição": "(+) Receitas Financeiras",           "Valor": fmt_moeda(rec_financ)},
-        {"Descrição": "(-) Despesas Financeiras",           "Valor": fmt_moeda(desp_financ * -1)},
+        {"Descrição": "(=) Receita Operacional Bruta", "Valor": fmt_moeda(rec_bruta)},
+        {"Descrição": "(-) Deduções da Receita", "Valor": fmt_moeda(deducoes * -1)},
+        {"Descrição": "(=) Receita Operacional Líquida", "Valor": fmt_moeda(rec_liquida)},
+        {"Descrição": "(-) Custos (CMV/CSP)", "Valor": fmt_moeda(custos * -1)},
+        {"Descrição": "(=) Lucro Bruto", "Valor": fmt_moeda(lucro_bruto)},
+        {"Descrição": "(-) Despesas Operacionais", "Valor": fmt_moeda(despesas_op * -1)},
+        {"Descrição": "(+) Receitas Financeiras", "Valor": fmt_moeda(rec_financ)},
+        {"Descrição": "(-) Despesas Financeiras", "Valor": fmt_moeda(desp_financ * -1)},
         {"Descrição": "(=) Resultado Líquido do Exercício", "Valor": fmt_moeda(res_liquido)}
     ]
     df_dre = pd.DataFrame(dre_rows)
@@ -596,18 +628,7 @@ def login():
     user = s.exec(select(Usuario).where(Usuario.username == u)).first()
     
     if user:
-        # Verifica se é hash ou texto puro (compatibilidade com versões antigas)
-        if user.senha.startswith('$2b$'):
-            senha_valida = verificar_senha(p, user.senha)
-        else:
-            senha_valida = (p == user.senha)
-            if senha_valida:
-                # Migra para hash
-                user.senha = hash_senha(p)
-                s.add(user)
-                s.commit()
-        
-        if senha_valida:
+        if p == user.senha or (hasattr(user, 'senha') and user.senha and user.senha.startswith('$2b$') and verificar_senha(p, user.senha)):
             st.session_state["user"] = user
             st.rerun()
         else:
@@ -621,10 +642,6 @@ def logout():
 
 # ── TELA DE LOGIN ──────────────────────────────────────────────────────────────
 if "user" not in st.session_state or not st.session_state["user"]:
-
-    if "show_forgot" not in st.session_state:
-        st.session_state["show_forgot"] = False
-
     st.markdown("""
     <style>
         [data-testid="stAppViewContainer"] {
@@ -651,10 +668,6 @@ if "user" not in st.session_state or not st.session_state["user"]:
             padding: 36px 40px 28px 40px;
             text-align: center;
             border-bottom: 1px solid #e8f0f5;
-        }
-        .login-body {
-            padding: 28px 36px 32px 36px;
-            background: white;
         }
         .field-label {
             color: #334155;
@@ -797,22 +810,22 @@ if menu == "Dashboard":
         c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Alunos</div><div class='kpi-val'>{len(session.exec(select(Usuario).where(Usuario.perfil=='aluno')).all())}</div></div>", unsafe_allow_html=True)
     elif me.perfil == 'professor':
         minhas_turmas = session.exec(select(Turma).where(Turma.professor_id == me.id)).all()
-        total_turmas  = len(minhas_turmas)
-        total_alunos  = len(session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()) if minhas_turmas else 0
-        total_aulas   = len(session.exec(select(Aula).where(Aula.professor_id == me.id)).all())
-        escola_nome   = session.get(Escola, me.escola_id).nome if me.escola_id else "Não vinculada"
+        total_turmas = len(minhas_turmas)
+        total_alunos = len(session.exec(select(Usuario).where(Usuario.perfil == 'aluno').where(Usuario.turma_id.in_([t.id for t in minhas_turmas]))).all()) if minhas_turmas else 0
+        total_aulas = len(session.exec(select(Aula).where(Aula.professor_id == me.id)).all())
+        escola_nome = session.get(Escola, me.escola_id).nome if me.escola_id else "Não vinculada"
         c1, c2, c3, c4 = st.columns(4)
         c1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Minhas Turmas</div><div class='kpi-val'>{total_turmas}</div></div>", unsafe_allow_html=True)
-        c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Total de Alunos</div><div class='kpi-val' style='color:#3498db'>{total_alunos}</div></div>", unsafe_allow_html=True)
-        c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Aulas Postadas</div><div class='kpi-val' style='color:#e74c3c'>{total_aulas}</div></div>", unsafe_allow_html=True)
-        c4.markdown(f"<div class='kpi-card'><div class='kpi-title'>Instituição</div><div class='kpi-val' style='font-size:0.9rem'>{escola_nome[:15]}...</div></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Total de Alunos</div><div class='kpi-val'>{total_alunos}</div></div>", unsafe_allow_html=True)
+        c3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Aulas Postadas</div><div class='kpi-val'>{total_aulas}</div></div>", unsafe_allow_html=True)
+        c4.markdown(f"<div class='kpi-card'><div class='kpi-title'>Instituição</div><div class='kpi-val'>{escola_nome[:15]}...</div></div>", unsafe_allow_html=True)
         st.divider()
         st.subheader("🎯 Suas Turmas")
         if minhas_turmas:
             col1, col2 = st.columns(2)
             for idx, turma in enumerate(minhas_turmas):
                 alunos_na_turma = session.exec(select(Usuario).where(Usuario.turma_id == turma.id)).all()
-                aulas_turma     = session.exec(select(Aula).where(Aula.turma_id == turma.id)).all()
+                aulas_turma = session.exec(select(Aula).where(Aula.turma_id == turma.id)).all()
                 col = col1 if idx % 2 == 0 else col2
                 with col.container(border=True):
                     col.write(f"**{turma.nome}**")
@@ -840,7 +853,7 @@ if menu == "Dashboard":
         cor_luc = 'green' if luc >= 0 else 'red'
         c2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Resultado Líquido</div><div class='kpi-val' style='color:{cor_luc}'>{fmt_moeda(luc)}</div></div>", unsafe_allow_html=True)
         if me.turma_id:
-            turma      = session.get(Turma, me.turma_id)
+            turma = session.get(Turma, me.turma_id)
             aulas_turma = session.exec(select(Aula).where(Aula.turma_id == me.turma_id)).all()
             st.divider()
             st.subheader("📚 Sua Turma e Aulas")
@@ -871,7 +884,7 @@ elif menu == "Meu Perfil":
             st.rerun()
 
 # ==============================================================================
-# ESCRIBITURAÇÃO E DIÁRIO (COM EDIÇÃO DE LANÇAMENTOS)
+# ESCRITURAÇÃO E DIÁRIO
 # ==============================================================================
 elif menu == "Escrituração e Diário":
     st.header("📝 Escrituração")
@@ -905,7 +918,6 @@ elif menu == "Escrituração e Diário":
         st.divider()
         st.subheader("📋 Lançamentos registrados")
         
-        # Estado para controle de edição
         if 'editando_lancamento' not in st.session_state:
             st.session_state.editando_lancamento = None
         
@@ -928,7 +940,6 @@ elif menu == "Escrituração e Diário":
             st.session_state.editando_lancamento = None
             st.rerun()
         
-        # Cabeçalho
         cab = st.columns([1.2, 2.5, 2.5, 1.5, 2.5, 1, 1])
         for col, label in zip(cab, ["Data", "Débito", "Crédito", "Valor", "Histórico", "Editar", "Excluir"]):
             col.markdown(f"<div style='font-size:0.78em;font-weight:700;color:#004b8d;padding-bottom:4px;'>{label}</div>", unsafe_allow_html=True)
@@ -936,7 +947,6 @@ elif menu == "Escrituração e Diário":
         
         for l in lancs:
             cols = st.columns([1.2, 2.5, 2.5, 1.5, 2.5, 1, 1])
-            
             with cols[0]:
                 st.write(formatar_data_br(l.data_lancamento))
             with cols[1]:
@@ -955,7 +965,6 @@ elif menu == "Escrituração e Diário":
                     session.delete(session.get(Lancamento, l.id)); session.commit()
                     st.rerun()
             
-            # Formulário de edição
             if st.session_state.editando_lancamento == l.id:
                 with st.container(border=True):
                     st.markdown("**✏️ Editando lançamento**")
@@ -964,7 +973,7 @@ elif menu == "Escrituração e Diário":
                         nova_data = st.date_input("Data", value=l.data_lancamento, key=f"data_{l.id}")
                         novo_debito = st.selectbox(
                             "Débito", contas,
-                            index=contas.index(f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, '')}") 
+                            index=contas.index(f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, '')}")
                             if f"{l.conta_debito} - {mapa_nomes.get(l.conta_debito, '')}" in contas else 0,
                             key=f"deb_{l.id}"
                         )
@@ -977,39 +986,89 @@ elif menu == "Escrituração e Diário":
                             key=f"cred_{l.id}"
                         )
                     novo_historico = st.text_area("Histórico", value=l.historico or "", key=f"hist_{l.id}")
-                    
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2 = st.columns(2)
                     with col1:
                         if st.button("💾 Salvar", key=f"save_{l.id}", type="primary"):
                             salvar_edicao(l.id, nova_data, novo_debito, novo_credito, novo_valor, novo_historico)
                     with col2:
                         if st.button("❌ Cancelar", key=f"cancel_{l.id}"):
                             cancelar_edicao()
-            
             st.divider()
-    
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
-# RAZONETES
+# RAZONETES (VERSÃO MELHORADA COM LANÇAMENTOS DETALHADOS)
 # ==============================================================================
 elif menu == "Razonetes":
     st.header("🗂️ Razonetes")
-    mov = calcular_movimentacao(me.id)
-    cols = st.columns(2); i = 0
-    for k, v in mov.items():
-        html = f"""<div class='razonete-container'>
-  <div class='razonete-header'>{k} - {v['nome']}</div>
-  <div style='display:flex;background:#f8f9fa;border-bottom:1px solid #e0e0e0;'>
-    <div style='width:50%;text-align:center;padding:4px 6px;font-size:0.68em;font-weight:700;color:#c0392b;border-right:1px solid #ddd;letter-spacing:0.5px;'>DÉBITO</div>
-    <div style='width:50%;text-align:center;padding:4px 6px;font-size:0.68em;font-weight:700;color:#27ae60;letter-spacing:0.5px;'>CRÉDITO</div>
-  </div>
-  <div class='razonete-body'>
-    <div class='col-debito'>{fmt_moeda(v['total_debito'])}</div>
-    <div class='col-credito'>{fmt_moeda(v['total_credito'])}</div>
-  </div>
-</div>"""
-        cols[i % 2].markdown(html, unsafe_allow_html=True); i += 1
+    
+    modo = st.radio("Visualização:", ["Resumido (Totais)", "Detalhado (Todos lançamentos)"], horizontal=True)
+    
+    if modo == "Resumido (Totais)":
+        mov = calcular_movimentacao(me.id)
+        cols = st.columns(2); i = 0
+        for k, v in mov.items():
+            html = f"""<div class='razonete-container'>
+              <div class='razonete-header'>{k} - {v['nome']}</div>
+              <div style='display:flex;background:#f8f9fa;border-bottom:1px solid #e0e0e0;'>
+                <div style='width:50%;text-align:center;padding:4px 6px;font-weight:700;color:#c0392b;'>DÉBITO</div>
+                <div style='width:50%;text-align:center;padding:4px 6px;font-weight:700;color:#27ae60;'>CRÉDITO</div>
+              </div>
+              <div class='razonete-body'>
+                <div class='col-debito'>{fmt_moeda(v['total_debito'])}</div>
+                <div class='col-credito'>{fmt_moeda(v['total_credito'])}</div>
+              </div>
+              <div style='padding:8px;text-align:center;background:#f8f9fa;border-top:1px solid #ddd;'>
+                <strong>Saldo: {fmt_moeda(v['saldo'])}</strong> ({'Devedor' if v['saldo'] >= 0 else 'Credor'})
+              </div>
+            </div>"""
+            cols[i % 2].markdown(html, unsafe_allow_html=True); i += 1
+    
+    else:
+        mov_detalhado = calcular_movimentacao_detalhada(me.id)
+        
+        if mov_detalhado:
+            contas_disponiveis = sorted(mov_detalhado.keys())
+            conta_selecionada = st.selectbox("Selecione a conta para ver detalhes:", contas_disponiveis)
+            
+            if conta_selecionada:
+                dados = mov_detalhado[conta_selecionada]
+                
+                st.markdown(f"""
+                <div style='background:linear-gradient(135deg,#004b8d,#0066c0);color:white;padding:15px;border-radius:10px;margin-bottom:20px;'>
+                    <h2 style='margin:0;text-align:center;'>{conta_selecionada} - {dados['nome']}</h2>
+                    <p style='text-align:center;margin:5px 0 0;opacity:0.9;'>Natureza: {dados['natureza']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                with st.expander("📋 Lista de Lançamentos", expanded=True):
+                    tabela_data = []
+                    for lanc in dados['lancamentos']:
+                        tabela_data.append({
+                            "Data": formatar_data_br(lanc['data']),
+                            "Tipo": "💳 Débito" if lanc['tipo'] == 'D' else "💰 Crédito",
+                            "Valor": fmt_moeda(lanc['valor']),
+                            "Contrapartida": lanc['conta_contrapartida'],
+                            "Histórico": lanc['historico'][:50] + "..." if len(lanc['historico']) > 50 else lanc['historico'],
+                            "Saldo Parcial": fmt_moeda(lanc['saldo_parcial'])
+                        })
+                    df = pd.DataFrame(tabela_data)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                col1, col2, col3 = st.columns(3)
+                total_debitos = sum(l['valor'] for l in dados['lancamentos'] if l['tipo'] == 'D')
+                total_creditos = sum(l['valor'] for l in dados['lancamentos'] if l['tipo'] == 'C')
+                
+                with col1:
+                    st.metric("Total Débitos", fmt_moeda(total_debitos))
+                with col2:
+                    st.metric("Total Créditos", fmt_moeda(total_creditos))
+                with col3:
+                    st.metric("Saldo Final", fmt_moeda(dados['saldo_final']), 
+                             delta="Devedor" if dados['saldo_final'] >= 0 else "Credor")
+        else:
+            st.info("Nenhum lançamento encontrado para este usuário.")
+    
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
@@ -1022,55 +1081,34 @@ elif menu == "Balancete":
         dados_tabela = []
         total_debito = 0
         total_credito = 0
-        
         for k, v in sorted(mov.items()):
             dados_tabela.append({
                 "Conta": f"{k} - {v['nome']}",
-                "Débito": v['total_debito'],
-                "Crédito": v['total_credito'],
-                "Saldo": v['saldo']
+                "Débito": fmt_moeda(v['total_debito']),
+                "Crédito": fmt_moeda(v['total_credito']),
+                "Saldo": fmt_moeda(v['saldo'])
             })
             total_debito += v['total_debito']
             total_credito += v['total_credito']
-        
         df = pd.DataFrame(dados_tabela)
         st.dataframe(df, use_container_width=True, hide_index=True)
-        
         st.markdown("---")
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            st.markdown(f"""
-            <div class='total-card'>
-                <h3>💰 TOTAL DÉBITOS</h3>
-                <div class='valor'>{fmt_moeda(total_debito)}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("💰 TOTAL DÉBITOS", fmt_moeda(total_debito))
         with col2:
-            st.markdown(f"""
-            <div class='total-card'>
-                <h3>💰 TOTAL CRÉDITOS</h3>
-                <div class='valor'>{fmt_moeda(total_credito)}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("💰 TOTAL CRÉDITOS", fmt_moeda(total_credito))
         with col3:
             diferenca = total_debito - total_credito
-            cor = "#27ae60" if abs(diferenca) < 0.01 else "#c0392b"
-            st.markdown(f"""
-            <div class='total-card' style='background: linear-gradient(135deg, #2c3e50, #34495e);'>
-                <h3>📊 DIFERENÇA</h3>
-                <div class='valor' style='color:{cor};'>{fmt_moeda(abs(diferenca))}</div>
-                <small style='color:white;'>{"✅ EQUILIBRADO" if abs(diferenca) < 0.01 else "⚠️ DESEQUILIBRADO"}</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("📊 DIFERENÇA", fmt_moeda(abs(diferenca)),
+                     delta="Equilibrado" if abs(diferenca) < 0.01 else "Desequilibrado",
+                     delta_color="normal" if abs(diferenca) < 0.01 else "inverse")
         if abs(total_debito - total_credito) > 0.01:
             st.warning("⚠️ O balancete está desequilibrado! Verifique seus lançamentos.")
         else:
             st.success("✅ Balancete equilibrado! Os débitos e créditos estão balanceados.")
     else:
-        st.info("Nenhuma movimentação encontrada. Registre lançamentos para visualizar o balancete.")
-    
+        st.info("Nenhuma movimentação encontrada.")
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
@@ -1099,7 +1137,6 @@ elif menu == "DRE":
     for codigo, dados in mov.items():
         saldo = dados['saldo']
         nome = f"{codigo} - {dados['nome']}"
-        
         if codigo.startswith('3.1'):
             receitas += saldo
             if saldo != 0:
@@ -1245,13 +1282,13 @@ elif menu == "Balanço":
         for pfx in sorted(grupos.keys()):
             linhas = grupos[pfx]
             if not linhas: continue
-            subtotal   = sum(l["Saldo"] for l in linhas)
+            subtotal = sum(l["Saldo"] for l in linhas)
             nome_grupo = nomes_grupos.get(pfx, pfx)
-            rows += f"<table><td colspan='2' style='background:#e8f0fe;font-weight:700;font-size:0.82em;padding:6px 10px;color:#004b8d;border-top:2px solid #c5d8f6;'>{nome_grupo}</td></tr>"
+            rows += f"<table><td colspan='2' style='background:#e8f0fe;font-weight:700;font-size:0.82em;padding:6px 10px;color:#004b8d;border-top:2px solid #c5d8f6;'>{nome_grupo} Porne"
             for l in linhas:
-                rows += f"<tr><td style='padding:4px 10px 4px 20px;font-size:0.8em;color:#444;'>{l['Conta']}</td><td style='text-align:right;padding:4px 10px;font-size:0.8em;color:#222;white-space:nowrap;'>{fmt_moeda(l['Saldo'])}</td>"
-            rows += f"<tr style='background:#f0f4fb;'><td style='text-align:right;padding:3px 10px;font-size:0.78em;color:#555;font-style:italic;'>Subtotal</td><td style='text-align:right;padding:3px 10px;font-size:0.8em;font-weight:700;color:#004b8d;white-space:nowrap;border-top:1px solid #c5d8f6;'>{fmt_moeda(subtotal)}</td>"
-        rows += f"<tr style='background:#004b8d;'><td style='padding:8px 10px;font-size:0.85em;font-weight:700;color:white;'>TOTAL GERAL</td><td style='text-align:right;padding:8px 10px;font-size:0.88em;font-weight:700;color:white;white-space:nowrap;'>{fmt_moeda(total_geral)}</td>"
+                rows += f"<tr><td style='padding:4px 10px 4px 20px;font-size:0.8em;color:#444;'>{l['Conta']}</td><td style='text-align:right;padding:4px 10px;font-size:0.8em;color:#222;white-space:nowrap;'>{fmt_moeda(l['Saldo'])}</td>他们"
+            rows += f"<tr style='background:#f0f4fb;'><td style='text-align:right;padding:3px 10px;font-size:0.78em;color:#555;font-style:italic;'>Subtotal</td><td style='text-align:right;padding:3px 10px;font-size:0.8em;font-weight:700;color:#004b8d;white-space:nowrap;border-top:1px solid #c5d8f6;'>{fmt_moeda(subtotal)}</td></tr>"
+        rows += f"<tr style='background:#004b8d;'><td style='padding:8px 10px;font-size:0.85em;font-weight:700;color:white;'>TOTAL GERAL</td><td style='text-align:right;padding:8px 10px;font-size:0.88em;font-weight:700;color:white;white-space:nowrap;'>{fmt_moeda(total_geral)}</td></tr>"
         return f"<table style='width:100%;border-collapse:collapse;border:1px solid #dde4f0;border-radius:8px;overflow:hidden;'>{rows}</table>"
 
     c1, c2 = st.columns(2)
@@ -1264,7 +1301,7 @@ elif menu == "Balanço":
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
-# DEMAIS MENUS (ESCOLAS, PROFESSORES, TURMAS, ALUNOS, ETC)
+# MÓDULOS ADMINISTRATIVOS (ESCOLAS, PROFESSORES, TURMAS, ALUNOS)
 # ==============================================================================
 elif menu == "Escolas":
     st.header("🏢 Escolas")
@@ -1272,7 +1309,8 @@ elif menu == "Escolas":
     with st.form("ne", clear_on_submit=True):
         n = st.text_input("Nome da escola")
         c = st.text_input("Cidade")
-        if st.form_submit_button("💾 Salvar escola", type="primary", use_container_width=True):
+        salvar = st.form_submit_button("💾 Salvar escola", type="primary", use_container_width=True)
+        if salvar:
             if n and c:
                 session.add(Escola(nome=n, cidade=c)); session.commit()
                 st.success(f"Escola '{n}' cadastrada!"); st.rerun()
@@ -1303,8 +1341,9 @@ elif menu == "Professores":
             n = st.text_input("Nome completo")
             u = st.text_input("Login de acesso")
             e = st.selectbox("Escola vinculada", escolas, format_func=lambda x: x.nome)
-            st.caption("Senha inicial: **123** (será armazenada com segurança)")
-            if st.form_submit_button("💾 Cadastrar professor", type="primary", use_container_width=True):
+            st.caption("Senha inicial: **123**")
+            salvar = st.form_submit_button("💾 Cadastrar professor", type="primary", use_container_width=True)
+            if salvar:
                 if n and u:
                     if session.exec(select(Usuario).where(Usuario.username == u)).first():
                         st.error("❌ Login já em uso.")
@@ -1339,10 +1378,11 @@ elif menu == "Turmas":
         st.subheader("➕ Criar nova turma")
         professores_list = session.exec(select(Usuario).where(Usuario.perfil == 'professor')).all()
         with st.form("nt", clear_on_submit=True):
-            n         = st.text_input("Nome da turma")
-            a         = st.text_input("Ano letivo", value="2026")
+            n = st.text_input("Nome da turma")
+            a = st.text_input("Ano letivo", value="2026")
             professor = st.selectbox("Professor responsável", professores_list, format_func=lambda x: x.nome)
-            if st.form_submit_button("💾 Criar turma", type="primary", use_container_width=True):
+            salvar = st.form_submit_button("💾 Criar turma", type="primary", use_container_width=True)
+            if salvar:
                 if n and a:
                     session.add(Turma(nome=n, ano_letivo=a, professor_id=professor.id, escola_id=professor.escola_id or 1))
                     session.commit(); st.success(f"Turma '{n}' criada!"); st.rerun()
@@ -1383,8 +1423,9 @@ elif menu == "Alunos" or menu == "Meus Alunos":
             n = st.text_input("Nome completo do aluno")
             u = st.text_input("Login de acesso")
             t = st.selectbox("Turma", turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-            st.caption("Senha inicial: **123** (será armazenada com segurança)")
-            if st.form_submit_button("💾 Matricular aluno", type="primary", use_container_width=True):
+            st.caption("Senha inicial: **123**")
+            salvar = st.form_submit_button("💾 Matricular aluno", type="primary", use_container_width=True)
+            if salvar:
                 if n and u:
                     if session.exec(select(Usuario).where(Usuario.username == u)).first():
                         st.error("❌ Login já em uso.")
@@ -1419,10 +1460,10 @@ elif menu == "Postar Aulas":
             st.error("Você não tem turmas criadas.")
         else:
             with st.form("postar_aula", clear_on_submit=True):
-                turma    = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
-                titulo   = st.text_input("Título da aula")
+                turma = st.selectbox("Turma", minhas_turmas, format_func=lambda x: f"{x.nome} ({x.ano_letivo})")
+                titulo = st.text_input("Título da aula")
                 descricao = st.text_area("Descrição / Conteúdo")
-                arquivo  = st.file_uploader("Anexar arquivo", type=["pdf","doc","docx","ppt","pptx","xls","xlsx","txt","jpg","png"])
+                arquivo = st.file_uploader("Anexar arquivo", type=["pdf","doc","docx","ppt","pptx","xls","xlsx","txt","jpg","png"])
                 if st.form_submit_button("📤 Postar Aula", type="primary", use_container_width=True):
                     if titulo and descricao:
                         arquivo_blob = arquivo.read() if arquivo else None
