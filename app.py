@@ -42,130 +42,68 @@ def verificar_senha(senha: str, senha_hash: str) -> bool:
 
 st.markdown("""
 <style>
+    /* Layout geral */
     .block-container { padding-top: 2rem !important; max-width: 1200px !important; }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stTextInput>div>div>input { border-radius: 8px; border: 1px solid #e0e0e0; height: 44px; }
     .stSelectbox>div>div { border-radius: 8px; border: 1px solid #e0e0e0; }
-
-    /* ===================== BOTÕES RESPONSIVOS ===================== */
-
-    /* Base comum a todos os botões */
-    .stButton > button,
-    .stFormSubmitButton > button,
-    .stDownloadButton > button {
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-weight: 600 !important;
-        border-radius: 8px !important;
-        border: none !important;
-        cursor: pointer !important;
-        transition: all 0.2s ease !important;
-        white-space: nowrap !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.12) !important;
-        letter-spacing: 0.3px !important;
+    
+    /* Estilo para o histórico dos lançamentos (mais nítido) */
+    .stCaption, .stContainer .stCaption, [data-testid="stContainer"] .stCaption {
+        color: #111111 !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        opacity: 1 !important;
+        font-family: 'Segoe UI', 'Aptos', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        background: transparent !important;
     }
-
-    /* ── Botões normais fora de form (excluir, sair, ação inline) ── */
-    .stButton > button {
-        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
-        color: white !important;
-        padding: 5px 12px !important;
+    
+    /* Botões */
+    .stButton button {
+        padding: 4px 8px !important;
         font-size: 12px !important;
-        min-height: 34px !important;
+        border-radius: 6px !important;
+        height: auto !important;
+        min-height: 32px !important;
         width: auto !important;
+        min-width: 70px !important;
+        max-width: 100px !important;
+        white-space: nowrap !important;
+        background-color: #dc3545 !important;
+        color: white !important;
+        border: none !important;
     }
-    .stButton > button:hover {
-        background: linear-gradient(135deg, #c82333 0%, #a71d2a 100%) !important;
-        box-shadow: 0 4px 8px rgba(220,53,69,0.35) !important;
-        transform: translateY(-1px) !important;
+    
+    .stButton button:hover {
+        background-color: #c82333 !important;
+        color: white !important;
     }
-    .stButton > button:active {
-        transform: translateY(0px) !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-    }
-
-    /* ── Botões de submit de formulário (compactos, largura automática) ── */
-    .stFormSubmitButton > button {
-        padding: 7px 22px !important;
-        font-size: 13px !important;
-        min-height: 38px !important;
-        width: auto !important;
-        max-width: fit-content !important;
-    }
-
-    /* Submit primário — azul */
-    .stFormSubmitButton > button[kind="primary"] {
+    
+    .stButton button[kind="primary"] {
         background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important;
-        color: white !important;
     }
-    .stFormSubmitButton > button[kind="primary"]:hover {
+    
+    .stButton button[kind="primary"]:hover {
         background: linear-gradient(135deg, #003d6e 0%, #0055a3 100%) !important;
-        box-shadow: 0 4px 8px rgba(0,75,141,0.35) !important;
-        transform: translateY(-1px) !important;
     }
-
-    /* Submit secundário — cinza (cancelar) */
-    .stFormSubmitButton > button[kind="secondary"] {
-        background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%) !important;
-        color: white !important;
+    
+    div[data-testid="column"] .stButton {
+        display: inline-block;
+        width: auto;
     }
-    .stFormSubmitButton > button[kind="secondary"]:hover {
-        background: linear-gradient(135deg, #5a6268 0%, #495057 100%) !important;
-        box-shadow: 0 4px 8px rgba(108,117,125,0.35) !important;
-        transform: translateY(-1px) !important;
-    }
-
-    /* Submit padrão (sem kind) — vermelho */
-    .stFormSubmitButton > button:not([kind="primary"]):not([kind="secondary"]) {
-        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
-        color: white !important;
-    }
-
-    /* ── Botão primário fora de form (ex: "Li e Concordo") ── */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important;
-        color: white !important;
-        padding: 7px 22px !important;
-        font-size: 13px !important;
-        min-height: 38px !important;
-    }
-    .stButton > button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #003d6e 0%, #0055a3 100%) !important;
-        box-shadow: 0 4px 8px rgba(0,75,141,0.35) !important;
-        transform: translateY(-1px) !important;
-    }
-
-    /* ── Download button — verde ── */
-    .stDownloadButton > button {
-        background: linear-gradient(135deg, #28a745 0%, #218838 100%) !important;
-        color: white !important;
-        padding: 7px 18px !important;
-        font-size: 13px !important;
-        min-height: 36px !important;
-        width: auto !important;
-        box-shadow: 0 2px 4px rgba(40,167,69,0.25) !important;
-    }
-    .stDownloadButton > button:hover {
-        background: linear-gradient(135deg, #218838 0%, #1a6d2e 100%) !important;
-        box-shadow: 0 4px 8px rgba(40,167,69,0.4) !important;
-        transform: translateY(-1px) !important;
-    }
-
-    /* ===================== KPI & LAYOUT ===================== */
+    
+    /* KPI Cards */
     .kpi-card {
         background: white;
         border-left: 4px solid #004b8d;
         padding: 20px;
         border-radius: 10px;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
-        margin-bottom: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
-    .kpi-title { font-size: 0.8em; color: #6c757d; font-weight: 600; text-transform: uppercase; }
-    .kpi-val { font-size: 1.6em; font-weight: 700; color: #004b8d; margin-top: 4px; }
-
+    
+    /* Razonetes */
     .razonete-container {
         background: white;
         border: 1px solid #e0e0e0;
@@ -173,6 +111,7 @@ st.markdown("""
         margin-bottom: 20px;
         overflow: hidden;
     }
+    
     .razonete-header {
         text-align: center;
         font-weight: 600;
@@ -180,18 +119,21 @@ st.markdown("""
         background-color: #004b8d;
         padding: 10px;
     }
-    .razonete-body {
-        display: flex;
+    
+    .razonete-body { 
+        display: flex; 
         flex-direction: column;
         min-height: 80px;
         max-height: 400px;
         overflow-y: auto;
     }
+    
     .lancamento-item {
         display: flex;
         border-bottom: 1px solid #f0f0f0;
         font-size: 12px;
     }
+    
     .lancamento-debito {
         width: 50%;
         text-align: center;
@@ -199,17 +141,21 @@ st.markdown("""
         color: #c0392b;
         border-right: 1px solid #ddd;
     }
+    
     .lancamento-credito {
         width: 50%;
         text-align: center;
         padding: 8px;
         color: #27ae60;
     }
+    
     .lancamento-data {
         font-size: 10px;
         color: #666;
         margin-top: 2px;
     }
+    
+    /* Caixa legal (termos) */
     .legal-box {
         background-color: #fff3cd;
         border: 1px solid #ffeeba;
@@ -218,6 +164,8 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 20px;
     }
+    
+    /* Cabeçalhos de relatórios */
     .report-header {
         background-color: #f8f9fa;
         color: #004b8d;
@@ -227,6 +175,7 @@ st.markdown("""
         font-weight: 700;
         margin-bottom: 15px;
     }
+    
     .balanco-grupo {
         background-color: #e8f0fe;
         padding: 8px;
@@ -234,21 +183,20 @@ st.markdown("""
         margin-top: 10px;
         font-weight: bold;
     }
+    
     .balanco-conta {
         padding-left: 30px;
         font-size: 0.9em;
         color: #444;
     }
-
-    @media (max-width: 768px) {
-        .stButton > button {
-            font-size: 11px !important;
-            padding: 5px 8px !important;
-            min-height: 34px !important;
-        }
-        .block-container { padding-top: 1rem !important; }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
     }
-
+    
+    /* Impressão */
     @media print {
         .stSidebar, .stButton, .stForm { display: none !important; }
         .block-container { padding-top: 0 !important; }
