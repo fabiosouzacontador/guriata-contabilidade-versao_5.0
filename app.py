@@ -1254,10 +1254,12 @@ elif menu == "Escrituração e Diário":
                 col3.write(f"💰 {l.conta_credito} - {mapa_nomes.get(l.conta_credito, '')}")
                 col4.write(f"💵 {fmt_moeda(l.valor)}")
 
-               if l.historico:
-    st.markdown(f"<p style='color:#000000; font-weight:bold; font-size:13px; margin:0; padding:4px 0;'>📝 {l.historico}</p>", unsafe_allow_html=True)
+                           if l.historico:
+                st.markdown(f"**📝 {l.historico}**")
 
-col_a, col_b, col_c = st.columns([1, 1, 4])                with col_a:
+            col_a, col_b, col_c = st.columns([1, 1, 4])                
+
+with col_a:
                     if st.button("✏️ Editar", key=f"edit_{l.id}", use_container_width=True):
                         st.session_state["editando_id"] = l.id
                         st.session_state["editando_data"] = l.data_lancamento
