@@ -1255,7 +1255,7 @@ elif menu == "Escrituração e Diário":
                 col4.write(f"💵 {fmt_moeda(l.valor)}")
 
                 if l.historico:
-                    st.caption(f"📝 {l.historico}")
+    st.markdown(f"<p style='color:#000000; font-weight:bold; font-size:13px; margin:0; padding:4px 0;'>📝 {l.historico}</p>", unsafe_allow_html=True)
 
                 col_a, col_b, col_c = st.columns([1, 1, 4])
                 with col_a:
