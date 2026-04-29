@@ -49,15 +49,53 @@ st.markdown("""
     .stTextInput>div>div>input { border-radius: 8px; border: 1px solid #e0e0e0; height: 44px; }
     .stSelectbox>div>div { border-radius: 8px; border: 1px solid #e0e0e0; }
     
-    /* Estilo para o histórico dos lançamentos (mais nítido) */
-    .stCaption, .stContainer .stCaption, [data-testid="stContainer"] .stCaption {
+    /* ========== CORREÇÃO DEFINITIVA DO HISTÓRICO ========== */
+    /* Força a nitidez do texto do histórico em todos os lugares */
+    .stCaption, 
+    caption, 
+    .stMarkdown caption,
+    div[data-testid="stCaption"],
+    div[data-testid="stMarkdown"] caption,
+    .element-container .stCaption,
+    .stAlert .stCaption {
+        color: #000000 !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        opacity: 1 !important;
+        background: transparent !important;
+        font-family: 'Segoe UI', 'Aptos', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    
+    /* Força especificamente para textos de histórico dentro de containers */
+    .stContainer p, 
+    .stContainer .stMarkdown,
+    .stContainer .stCaption,
+    div[data-testid="stContainer"] p,
+    div[data-testid="stContainer"] .stMarkdown,
+    div[data-testid="stContainer"] .stCaption {
         color: #111111 !important;
         font-size: 13px !important;
         font-weight: 500 !important;
         opacity: 1 !important;
-        font-family: 'Segoe UI', 'Aptos', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        background: transparent !important;
     }
+    
+    /* Corrige fonte dos históricos nos lançamentos individuais */
+    .stContainer .stMarkdown p {
+        color: #1a1a1a !important;
+        font-size: 12.5px !important;
+        font-weight: 500 !important;
+        opacity: 1 !important;
+    }
+    
+    /* Corrige qualquer elemento com classe caption */
+    [class*="caption"], 
+    [class*="Caption"],
+    .element-container .stMarkdown:has(caption) {
+        color: #000000 !important;
+        opacity: 1 !important;
+        font-weight: 500 !important;
+    }
+    /* ========== FIM DA CORREÇÃO ========== */
     
     /* Botões */
     .stButton button {
@@ -86,11 +124,6 @@ st.markdown("""
     
     .stButton button[kind="primary"]:hover {
         background: linear-gradient(135deg, #003d6e 0%, #0055a3 100%) !important;
-    }
-    
-    div[data-testid="column"] .stButton {
-        display: inline-block;
-        width: auto;
     }
     
     /* KPI Cards */
@@ -155,7 +188,6 @@ st.markdown("""
         margin-top: 2px;
     }
     
-    /* Caixa legal (termos) */
     .legal-box {
         background-color: #fff3cd;
         border: 1px solid #ffeeba;
@@ -165,7 +197,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    /* Cabeçalhos de relatórios */
     .report-header {
         background-color: #f8f9fa;
         color: #004b8d;
@@ -190,18 +221,12 @@ st.markdown("""
         color: #444;
     }
     
-    .action-buttons {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-    }
-    
-    /* Impressão */
     @media print {
         .stSidebar, .stButton, .stForm { display: none !important; }
         .block-container { padding-top: 0 !important; }
     }
 </style>
+            
 """, unsafe_allow_html=True)
 
 # ==============================================================================
