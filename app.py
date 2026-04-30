@@ -50,7 +50,6 @@ st.markdown("""
     .stSelectbox>div>div { border-radius: 8px; border: 1px solid #e0e0e0; }
     
     /* ========== CORREÇÃO DEFINITIVA DO HISTÓRICO ========== */
-    /* Força a nitidez do texto do histórico em todos os lugares */
     .stCaption, 
     caption, 
     .stMarkdown caption,
@@ -66,7 +65,6 @@ st.markdown("""
         font-family: 'Segoe UI', 'Aptos', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
-    /* Força especificamente para textos de histórico dentro de containers */
     .stContainer p, 
     .stContainer .stMarkdown,
     .stContainer .stCaption,
@@ -79,7 +77,6 @@ st.markdown("""
         opacity: 1 !important;
     }
     
-    /* Corrige fonte dos históricos nos lançamentos individuais */
     .stContainer .stMarkdown p {
         color: #1a1a1a !important;
         font-size: 12.5px !important;
@@ -87,7 +84,6 @@ st.markdown("""
         opacity: 1 !important;
     }
     
-    /* Corrige qualquer elemento com classe caption */
     [class*="caption"], 
     [class*="Caption"],
     .element-container .stMarkdown:has(caption) {
@@ -95,7 +91,6 @@ st.markdown("""
         opacity: 1 !important;
         font-weight: 500 !important;
     }
-    /* ========== FIM DA CORREÇÃO ========== */
     
     /* Botões */
     .stButton button {
@@ -457,7 +452,6 @@ def carregar_dados_padrao(session):
 
     if not session.exec(select(ContaContabil)).first():
         contas = [
-            # ========== ATIVO (1) ==========
             ("1", "ATIVO", "S", "D"),
             ("1.1", "CIRCULANTE", "S", "D"),
             ("1.1.1", "Caixa Geral", "A", "D"),
@@ -468,7 +462,6 @@ def carregar_dados_padrao(session):
             ("1.1.6", "Impostos a Recuperar", "A", "D"),
             ("1.1.7", "Adiantamento a Fornecedores", "A", "D"),
             ("1.1.8", "Adiantamento a Funcionários", "A", "D"),
-
             ("1.2", "NÃO CIRCULANTE", "S", "D"),
             ("1.2.1", "Realizável a Longo Prazo", "S", "D"),
             ("1.2.2", "Investimentos", "S", "D"),
@@ -480,8 +473,6 @@ def carregar_dados_padrao(session):
             ("1.2.3.3", "Móveis e Utensílios", "A", "D"),
             ("1.2.3.4", "Equipamentos de Informática", "A", "D"),
             ("1.2.4", "Intangível", "A", "D"),
-
-            # ========== PASSIVO (2) ==========
             ("2", "PASSIVO", "S", "C"),
             ("2.1", "CIRCULANTE", "S", "C"),
             ("2.1.1", "Fornecedores", "A", "C"),
@@ -492,55 +483,44 @@ def carregar_dados_padrao(session):
             ("2.1.6", "Aluguéis a Pagar", "A", "C"),
             ("2.1.7", "Dividendos a Pagar", "A", "C"),
             ("2.1.8", "Empréstimos e Financiamentos (CP)", "A", "C"),
-
             ("2.2", "NÃO CIRCULANTE", "S", "C"),
             ("2.2.1", "Empréstimos e Financiamentos (LP)", "A", "C"),
             ("2.2.2", "Financiamentos (LP)", "A", "C"),
-
             ("2.3", "PATRIMÔNIO LÍQUIDO", "S", "C"),
             ("2.3.1", "Capital Social", "A", "C"),
             ("2.3.2", "Reservas de Lucros", "A", "C"),
             ("2.3.3", "Lucros Acumulados", "A", "C"),
             ("2.3.4", "Ajustes de Avaliação Patrimonial", "A", "C"),
             ("2.3.5", "Dividendos Propostos", "A", "C"),
-
-            # ========== RECEITAS (3) ==========
             ("3", "RECEITAS", "S", "C"),
             ("3.1", "RECEITA OPERACIONAL BRUTA", "S", "C"),
             ("3.1.1", "Venda de Mercadorias", "A", "C"),
             ("3.1.2", "Prestação de Serviços", "A", "C"),
             ("3.1.3", "Receita de Serviços Financeiros", "A", "C"),
-
             ("3.2", "DEDUÇÕES DA RECEITA BRUTA", "S", "D"),
             ("3.2.1", "Devoluções de Vendas", "A", "D"),
             ("3.2.2", "Impostos Incidentes sobre Vendas", "A", "D"),
             ("3.2.3", "Descontos Incondicionais Concedidos", "A", "D"),
-
             ("3.3", "RECEITAS FINANCEIRAS", "S", "C"),
             ("3.3.1", "Juros Ativos", "A", "C"),
             ("3.3.2", "Rendimentos de Aplicações Financeiras", "A", "C"),
             ("3.3.3", "Descontos Financeiros Obtidos", "A", "C"),
-
             ("3.4", "OUTRAS RECEITAS OPERACIONAIS", "S", "C"),
             ("3.4.1", "Receitas com Aluguéis", "A", "C"),
             ("3.4.2", "Receitas Eventuais", "A", "C"),
-
-            # ========== CUSTOS (4) ==========
             ("4", "CUSTOS", "S", "D"),
             ("4.1", "CUSTO DOS PRODUTOS VENDIDOS", "S", "D"),
             ("4.1.1", "Custo das Mercadorias Vendidas (CMV)", "A", "D"),
             ("4.1.2", "Custo dos Serviços Prestados (CSP)", "A", "D"),
             ("4.1.3", "Compras de Mercadorias", "A", "D"),
             ("4.1.4", "Fretes e Seguros sobre Compras", "A", "D"),
-
-            # ========== DESPESAS (5) ==========
             ("5", "DESPESAS OPERACIONAIS", "S", "D"),
             ("5.1", "DESPESAS COM PESSOAL", "S", "D"),
             ("5.1.1", "Salários e Ordenados", "A", "D"),
             ("5.1.2", "Pró-labore", "A", "D"),
             ("5.1.3", "Encargos Sociais (INSS, FGTS)", "A", "D"),
             ("5.1.4", "Benefícios (Vale Transporte, Alimentação)", "A", "D"),
-
+            ("5.1.5", "13º Salário", "A", "D"),
             ("5.2", "DESPESAS ADMINISTRATIVAS", "S", "D"),
             ("5.2.1", "Aluguel", "A", "D"),
             ("5.2.2", "Energia Elétrica", "A", "D"),
@@ -552,27 +532,21 @@ def carregar_dados_padrao(session):
             ("5.2.8", "Despesas com Transporte", "A", "D"),
             ("5.2.9", "Seguros", "A", "D"),
             ("5.2.10", "Serviços de Terceiros (Consultoria)", "A", "D"),
-
             ("5.3", "DESPESAS COMERCIAIS", "S", "D"),
             ("5.3.1", "Comissões sobre Vendas", "A", "D"),
             ("5.3.2", "Descontos Condicionais Concedidos", "A", "D"),
-
             ("5.4", "DESPESAS TRIBUTÁRIAS", "S", "D"),
             ("5.4.1", "PIS sobre Faturamento", "A", "D"),
             ("5.4.2", "COFINS sobre Faturamento", "A", "D"),
             ("5.4.3", "ISSQN (Imposto sobre Serviços)", "A", "D"),
             ("5.4.4", "IRPJ", "A", "D"),
             ("5.4.5", "CSLL (Contribuição Social)", "A", "D"),
-
-            # ========== RESULTADO FINANCEIRO (6) ==========
             ("6", "RESULTADO FINANCEIRO LÍQUIDO", "S", "D"),
             ("6.1", "DESPESAS FINANCEIRAS", "S", "D"),
             ("6.1.1", "Juros Passivos", "A", "D"),
             ("6.1.2", "Tarifas Bancárias", "A", "D"),
             ("6.1.3", "Descontos Financeiros Concedidos", "A", "D"),
             ("6.1.4", "Despesas com Juros de Empréstimos", "A", "D"),
-
-            # ========== OUTRAS DESPESAS (7) ==========
             ("7", "OUTRAS DESPESAS OPERACIONAIS", "S", "D"),
             ("7.1", "Despesas Eventuais", "A", "D"),
             ("7.2", "Perdas com Créditos Incobráveis", "A", "D"),
@@ -712,8 +686,8 @@ if "user" not in st.session_state or not st.session_state["user"]:
         .login-card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,75,141,0.15); overflow: hidden; }
         .login-hero { background: linear-gradient(160deg, #d4eaf4 0%, #e8f4f8 60%, #f0f8fc 100%); padding: 36px 40px; text-align: center; }
         .field-label { color: #334155; font-size: 0.72em; font-weight: 700; text-transform: uppercase; margin: 14px 0 4px 0; }
-            .stTextInput>div>div>input { border-radius: 10px !important; border: none !important; height: 44px !important; background: #f8fafc !important; box-shadow: none !important; outline: none !important; }
-    .stFormSubmitButton>button { height: 48px !important; border-radius: 10px !important; background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important; color: white !important; font-weight: 700 !important; font-size: 15px !important; border: none !important; box-shadow: none !important; }
+        .stTextInput>div>div>input { border-radius: 10px !important; border: none !important; height: 44px !important; background: #f8fafc !important; box-shadow: none !important; outline: none !important; }
+        .stFormSubmitButton>button { height: 48px !important; border-radius: 10px !important; background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important; color: white !important; font-weight: 700 !important; font-size: 15px !important; border: none !important; box-shadow: none !important; }
     </style>
     """, unsafe_allow_html=True)
     logo_b64 = get_image_base64("assets/logo.png")
@@ -754,6 +728,7 @@ with st.sidebar:
     opts = ["Dashboard", "Meu Perfil"]
     if me.perfil == 'admin':
         opts.extend(["Escolas", "Professores", "Turmas", "Alunos",
+                     "Plano de Contas",
                      "Escrituração e Diário", "Razonetes", "Balancete", "DRE", "Balanço"])
     elif me.perfil == 'professor':
         opts.extend(["Minhas Turmas", "Meus Alunos", "Postar Aulas",
@@ -1151,7 +1126,175 @@ elif menu == "Turmas":
         st.warning("Esta seção não está disponível para seu perfil.")
 
 # ==============================================================================
-# 14. ALUNOS (ADMIN)
+# 14. PLANO DE CONTAS (ADMIN)
+# ==============================================================================
+elif menu == "Plano de Contas":
+    st.header("📊 Plano de Contas - Gerência")
+    
+    tab1, tab2, tab3 = st.tabs(["📋 Visualizar Contas", "➕ Nova Conta", "✏️ Editar/Excluir Conta"])
+    
+    with tab1:
+        st.subheader("Plano de Contas Completo")
+        contas_db = session.exec(select(ContaContabil).order_by(ContaContabil.codigo)).all()
+        if contas_db:
+            df_contas = pd.DataFrame([{
+                "Código": c.codigo, 
+                "Nome": c.nome, 
+                "Tipo": "Analítica" if c.tipo == 'A' else "Sintética", 
+                "Natureza": "Devedora" if c.natureza == 'D' else "Credora"
+            } for c in contas_db])
+            st.dataframe(df_contas, use_container_width=True, hide_index=True)
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total de Contas", len(contas_db))
+            col2.metric("Contas Analíticas", sum(1 for c in contas_db if c.tipo == 'A'))
+            col3.metric("Contas Sintéticas", sum(1 for c in contas_db if c.tipo == 'S'))
+        else:
+            st.info("Nenhuma conta cadastrada.")
+    
+    with tab2:
+        st.subheader("➕ Criar Nova Conta Contábil")
+        st.warning("⚠️ **Atenção:** Ao criar contas, respeite a hierarquia do plano de contas!")
+        
+        with st.form("nova_conta", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                codigo = st.text_input("Código da Conta", placeholder="Ex: 1.1.9 ou 5.2.11")
+                nome = st.text_input("Nome da Conta", placeholder="Ex: Despesas com Viagens")
+            with col2:
+                tipo = st.selectbox("Tipo da Conta", 
+                                   options=["A", "S"],
+                                   format_func=lambda x: "Analítica (lançável)" if x == "A" else "Sintética (agrupadora)")
+                natureza = st.selectbox("Natureza da Conta",
+                                       options=["D", "C"],
+                                       format_func=lambda x: "Devedora" if x == "D" else "Credora")
+            
+            conta_existente = session.exec(select(ContaContabil).where(ContaContabil.codigo == codigo)).first() if codigo else None
+            
+            if codigo and conta_existente:
+                st.error(f"❌ Já existe uma conta com o código '{codigo}'!")
+            
+            if st.form_submit_button("💾 Criar Conta", type="primary"):
+                if codigo and nome:
+                    if conta_existente:
+                        st.error("Código já em uso!")
+                    else:
+                        if not codigo.replace('.', '').isdigit():
+                            st.error("Código deve conter apenas números e pontos (Ex: 1.1.1)")
+                        else:
+                            try:
+                                session.add(ContaContabil(
+                                    codigo=codigo,
+                                    nome=nome,
+                                    tipo=tipo,
+                                    natureza=natureza
+                                ))
+                                session.commit()
+                                st.success(f"✅ Conta '{codigo} - {nome}' criada com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Erro ao criar conta: {str(e)}")
+                else:
+                    st.warning("Preencha o código e o nome da conta!")
+    
+    with tab3:
+        st.subheader("✏️ Editar ou Excluir Conta")
+        
+        contas_analiticas = session.exec(select(ContaContabil).where(ContaContabil.tipo == 'A').order_by(ContaContabil.codigo)).all()
+        
+        if contas_analiticas:
+            contas_options = {f"{c.codigo} - {c.nome}": c for c in contas_analiticas}
+            conta_selecionada_nome = st.selectbox("Selecione a conta para editar/excluir", 
+                                                  options=list(contas_options.keys()))
+            
+            if conta_selecionada_nome:
+                conta = contas_options[conta_selecionada_nome]
+                
+                tem_lancamentos = session.exec(
+                    select(Lancamento).where(
+                        (Lancamento.conta_debito == conta.codigo) | 
+                        (Lancamento.conta_credito == conta.codigo)
+                    )
+                ).first() is not None
+                
+                if tem_lancamentos:
+                    st.warning("⚠️ **Esta conta possui lançamentos vinculados!** Alterações podem afetar o histórico contábil.")
+                
+                with st.form("editar_conta", clear_on_submit=False):
+                    st.markdown(f"**Editando:** {conta.codigo} - {conta.nome}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        novo_codigo = st.text_input("Novo código", value=conta.codigo)
+                        novo_nome = st.text_input("Novo nome", value=conta.nome)
+                    with col2:
+                        novo_tipo = st.selectbox("Novo tipo", 
+                                                options=["A", "S"],
+                                                index=0 if conta.tipo == "A" else 1,
+                                                format_func=lambda x: "Analítica" if x == "A" else "Sintética")
+                        nova_natureza = st.selectbox("Nova natureza",
+                                                    options=["D", "C"],
+                                                    index=0 if conta.natureza == "D" else 1,
+                                                    format_func=lambda x: "Devedora" if x == "D" else "Credora")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        if st.form_submit_button("💾 Salvar Alterações", type="primary"):
+                            if novo_codigo and novo_nome:
+                                codigo_existente = session.exec(
+                                    select(ContaContabil).where(
+                                        ContaContabil.codigo == novo_codigo,
+                                        ContaContabil.id != conta.id
+                                    )
+                                ).first()
+                                
+                                if codigo_existente:
+                                    st.error("❌ Este código já está em uso por outra conta!")
+                                else:
+                                    try:
+                                        if novo_codigo != conta.codigo and tem_lancamentos:
+                                            lancamentos_debito = session.exec(
+                                                select(Lancamento).where(Lancamento.conta_debito == conta.codigo)
+                                            ).all()
+                                            lancamentos_credito = session.exec(
+                                                select(Lancamento).where(Lancamento.conta_credito == conta.codigo)
+                                            ).all()
+                                            
+                                            for lanc in lancamentos_debito:
+                                                lanc.conta_debito = novo_codigo
+                                            for lanc in lancamentos_credito:
+                                                lanc.conta_credito = novo_codigo
+                                        
+                                        conta.codigo = novo_codigo
+                                        conta.nome = novo_nome
+                                        conta.tipo = novo_tipo
+                                        conta.natureza = nova_natureza
+                                        
+                                        session.commit()
+                                        st.success("✅ Conta atualizada com sucesso!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Erro ao atualizar: {str(e)}")
+                            else:
+                                st.warning("Preencha código e nome!")
+                    
+                    with col_btn2:
+                        if st.form_submit_button("🗑️ Excluir Conta", type="secondary"):
+                            if tem_lancamentos:
+                                st.error(f"❌ Não é possível excluir a conta '{conta.codigo} - {conta.nome}' pois existem lançamentos vinculados a ela!")
+                            else:
+                                try:
+                                    session.delete(conta)
+                                    session.commit()
+                                    st.success("✅ Conta excluída com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Erro ao excluir: {str(e)}")
+        else:
+            st.info("Nenhuma conta analítica disponível para edição.")
+
+# ==============================================================================
+# 15. ALUNOS (ADMIN)
 # ==============================================================================
 elif menu == "Alunos":
     st.header("🎓 Alunos")
@@ -1205,9 +1348,9 @@ elif menu == "Alunos":
                 st.info("Nenhum aluno matriculado ainda.")
     else:
         st.warning("Esta seção é apenas para administradores.")
-
+        
 # ==============================================================================
-# 15. ESCRITURAÇÃO E DIÁRIO (COM EDIÇÃO)
+# 16. ESCRITURAÇÃO E DIÁRIO (COM EDIÇÃO)
 # ==============================================================================
 elif menu == "Escrituração e Diário":
     st.header("📝 Escrituração Contábil")
@@ -1254,12 +1397,11 @@ elif menu == "Escrituração e Diário":
                 col3.write(f"💰 {l.conta_credito} - {mapa_nomes.get(l.conta_credito, '')}")
                 col4.write(f"💵 {fmt_moeda(l.valor)}")
 
-                           if l.historico:
-                st.markdown(f"**📝 {l.historico}**")
+                if l.historico:
+                    st.markdown(f"**📝 {l.historico}**")
 
-            col_a, col_b, col_c = st.columns([1, 1, 4])                
-
-with col_a:
+                col_a, col_b = st.columns(2)
+                with col_a:
                     if st.button("✏️ Editar", key=f"edit_{l.id}", use_container_width=True):
                         st.session_state["editando_id"] = l.id
                         st.session_state["editando_data"] = l.data_lancamento
@@ -1268,7 +1410,6 @@ with col_a:
                         st.session_state["editando_valor"] = l.valor
                         st.session_state["editando_historico"] = l.historico
                         st.rerun()
-
                 with col_b:
                     if st.button("🗑️ Excluir", key=f"del_{l.id}", use_container_width=True):
                         session.delete(l)
@@ -1325,7 +1466,7 @@ with col_a:
         st.info("Nenhum lançamento registrado ainda. Utilize o formulário acima para adicionar seu primeiro lançamento contábil!")
 
 # ==============================================================================
-# 16. RAZONETES
+# 17. RAZONETES
 # ==============================================================================
 elif menu == "Razonetes":
     st.header("🗂️ Razonetes com Lançamentos Sequenciais")
@@ -1389,7 +1530,7 @@ elif menu == "Razonetes":
         st.info("Nenhuma movimentação encontrada. Registre lançamentos para visualizar os razonetes.")
 
 # ==============================================================================
-# 17. BALANCETE
+# 18. BALANCETE
 # ==============================================================================
 elif menu == "Balancete":
     st.header("⚖️ Balancete de Verificação")
@@ -1424,7 +1565,7 @@ elif menu == "Balancete":
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
-# 18. DRE
+# 19. DRE
 # ==============================================================================
 elif menu == "DRE":
     st.header("📉 Demonstração do Resultado do Exercício")
@@ -1460,7 +1601,7 @@ elif menu == "DRE":
     botao_imprimir(menu, me, session)
 
 # ==============================================================================
-# 19. BALANÇO PATRIMONIAL
+# 20. BALANÇO PATRIMONIAL
 # ==============================================================================
 elif menu == "Balanço":
     st.header("🏛️ Balanço Patrimonial")
