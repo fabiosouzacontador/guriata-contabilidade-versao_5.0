@@ -738,7 +738,7 @@ with st.sidebar:
                      "Razonetes", "Balancete", "DRE", "Balanço"])
     menu = st.sidebar.radio("Navegação", opts, label_visibility="collapsed")
     st.markdown("---")
-    if st.button("🚪 Sair do Sistema", use_container_width=True): logout()
+    if st.button("🚪 Sair do Sistema"): logout()
 
 # ==============================================================================
 # 5. DASHBOARD
@@ -1237,7 +1237,7 @@ elif menu == "Plano de Contas":
                                                     index=0 if conta.natureza == "D" else 1,
                                                     format_func=lambda x: "Devedora" if x == "D" else "Credora")
                     
-                    col_btn1, col_btn2 = st.columns(2)
+                    col_btn1, col_btn2 = st.columns([1, 1])
                     with col_btn1:
                         if st.form_submit_button("💾 Salvar Alterações", type="primary"):
                             if novo_codigo and novo_nome:
