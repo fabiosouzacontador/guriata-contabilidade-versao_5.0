@@ -1,6 +1,23 @@
-venv/
+```
+# Python
 __pycache__/
 *.pyc
-.DS_Store
-*.db
-*.sqlite
+*.pyo
+*.pyd
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Streamlit
+.streamlit/secrets.toml
+```

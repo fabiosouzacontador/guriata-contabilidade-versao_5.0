@@ -23,22 +23,14 @@ st.set_page_config(
 )
 
 def formatar_data_br(data):
+    """Formata data para padrão brasileiro (DD/MM/YYYY)"""
     if data:
         return data.strftime('%d/%m/%Y')
     return ""
 
 def fmt_moeda(v):
+    """Formata valor como moeda brasileira (R$ X.XXX,XX)"""
     return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def hash_senha(senha: str) -> str:
-    salt = bcrypt.gensalt(rounds=12)
-    return bcrypt.hashpw(senha.encode('utf-8'), salt).decode('utf-8')
-
-def verificar_senha(senha: str, senha_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8'))
-    except:
-        return False
 
 st.markdown("""
 <style>
@@ -375,70 +367,24 @@ def gerar_html_impressao(menu, me, session):
     return html
 
 # ==============================================================================
-# 2. BANCO DE DADOS (NEON POSTGRESQL)
+# 2. BANCO DE DADOS - CONFIGURAÇÃO SEGURA
 # ==============================================================================
-DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
+# IMPORTANTE: As credenciais agora são carregadas de forma segura via:
+# 1. st.secrets (Streamlit Cloud) 
+# 2. Variável de ambiente DATABASE_URL
+# 3. SQLite local (fallback para desenvolvimento)
+# ==============================================================================
 
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=10)
+from src.config import engine, get_session, get_default_password
+from src.utils import hash_senha, verificar_senha, formatar_moeda as fmt_moeda, formatar_data_br
+from src.services.usuario_service import UsuarioService
+from src.models import Usuario, PlanoConta, Lancamento, Escola, Turma, Aluno, Aula
+# ContaContabil é o mesmo que PlanoConta
+ContaContabil = PlanoConta
+from src.controllers import razonete_controller, balancete_controller, dre_controller, balanco_controller
 
-class Escola(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    nome: str
-    cidade: str
-
-class Turma(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    nome: str
-    ano_letivo: str
-    professor_id: int
-    escola_id: int
-
-class Usuario(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    username: str
-    senha: str
-    nome: str
-    perfil: str
-    termos_aceitos: bool = Field(default=False)
-    criado_por_id: Optional[int] = Field(default=None)
-    escola_id: Optional[int] = Field(default=None)
-    turma_id: Optional[int] = Field(default=None)
-    xp: int = Field(default=0)
-    data_criacao: date = Field(default_factory=date.today)
-
-class Aula(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    titulo: str
-    descricao: str
-    arquivo_blob: Optional[bytes] = None
-    nome_arquivo: Optional[str] = None
-    professor_id: int
-    turma_id: int
-    data_postagem: date = Field(default_factory=date.today)
-
-class ContaContabil(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    codigo: str
-    nome: str
-    tipo: str
-    natureza: str
-
-class Lancamento(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    data_lancamento: date
-    conta_debito: str
-    conta_credito: str
-    valor: float
-    historico: str
-    usuario_id: int = Field(foreign_key="usuario.id")
-
-def get_session(): return Session(engine)
+# Os modelos foram movidos para src/models/ para melhor organização
+# Estes imports usam os modelos centralizados do pacote src
 
 def carregar_dados_padrao(session):
     if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
@@ -553,7 +499,20 @@ def carregar_dados_padrao(session):
         ]
 
         for c, n, t, nat in contas:
-            session.add(ContaContabil(codigo=c, nome=n, tipo=t, natureza=nat))
+            # Calcula o nível baseado no código (quantos pontos + 1)
+            nivel = c.count('.') + 1
+            # Determina se é analítica ou sintética
+            tipo_conta = "Analítica" if t == 'A' else "Sintética"
+            # Determina o grupo baseado no primeiro dígito do código
+            primeiro_digito = c.split('.')[0]
+            if primeiro_digito in ['1', '2']:
+                grupo = "Ativo" if primeiro_digito == '1' else "Passivo"
+            elif primeiro_digito in ['3', '4', '5', '6', '7']:
+                grupo = "Resultado"
+            else:
+                grupo = "Outros"
+            
+            session.add(ContaContabil(codigo=c, nome=n, tipo=tipo_conta, natureza=nat, nivel=nivel, grupo=grupo))
         session.commit()
 
 def inicializar_banco():
