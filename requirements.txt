@@ -1,5 +1,22 @@
-streamlit
-sqlmodel
-psycopg2-binary
-pandas
-numpy
+# Framework principal
+streamlit>=1.28.0
+
+# Banco de dados
+sqlmodel>=0.0.14
+psycopg2-binary>=2.9.9
+
+# Dados e cálculos
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Segurança
+bcrypt>=4.0.0
+
+# Utilitários
+python-dotenv>=1.0.0
+
+# Qualidade de código (desenvolvimento)
+flake8>=6.1.0
+black>=23.0.0
+mypy>=1.5.0
+pytest>=7.4.0

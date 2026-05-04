@@ -11,6 +11,8 @@ import warnings
 import time
 import bcrypt
 
+from src.views.landing_page import render_landing_page
+
 # ==============================================================================
 # 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
@@ -23,22 +25,14 @@ st.set_page_config(
 )
 
 def formatar_data_br(data):
+    """Formata data para padrão brasileiro (DD/MM/YYYY)"""
     if data:
         return data.strftime('%d/%m/%Y')
     return ""
 
 def fmt_moeda(v):
+    """Formata valor como moeda brasileira (R$ X.XXX,XX)"""
     return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def hash_senha(senha: str) -> str:
-    salt = bcrypt.gensalt(rounds=12)
-    return bcrypt.hashpw(senha.encode('utf-8'), salt).decode('utf-8')
-
-def verificar_senha(senha: str, senha_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8'))
-    except:
-        return False
 
 st.markdown("""
 <style>
@@ -375,70 +369,24 @@ def gerar_html_impressao(menu, me, session):
     return html
 
 # ==============================================================================
-# 2. BANCO DE DADOS (NEON POSTGRESQL)
+# 2. BANCO DE DADOS - CONFIGURAÇÃO SEGURA
 # ==============================================================================
-DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
+# IMPORTANTE: As credenciais agora são carregadas de forma segura via:
+# 1. st.secrets (Streamlit Cloud) 
+# 2. Variável de ambiente DATABASE_URL
+# 3. SQLite local (fallback para desenvolvimento)
+# ==============================================================================
 
-engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=10)
+from src.config import engine, get_session, get_default_password
+from src.utils import hash_senha, verificar_senha, formatar_moeda as fmt_moeda, formatar_data_br
+from src.services.usuario_service import UsuarioService
+from src.models import Usuario, PlanoConta, Lancamento, Escola, Turma, Aluno, Aula
+# ContaContabil é o mesmo que PlanoConta
+ContaContabil = PlanoConta
+from src.controllers import razonete_controller, balancete_controller, dre_controller, balanco_controller
 
-class Escola(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    nome: str
-    cidade: str
-
-class Turma(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    nome: str
-    ano_letivo: str
-    professor_id: int
-    escola_id: int
-
-class Usuario(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    username: str
-    senha: str
-    nome: str
-    perfil: str
-    termos_aceitos: bool = Field(default=False)
-    criado_por_id: Optional[int] = Field(default=None)
-    escola_id: Optional[int] = Field(default=None)
-    turma_id: Optional[int] = Field(default=None)
-    xp: int = Field(default=0)
-    data_criacao: date = Field(default_factory=date.today)
-
-class Aula(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    titulo: str
-    descricao: str
-    arquivo_blob: Optional[bytes] = None
-    nome_arquivo: Optional[str] = None
-    professor_id: int
-    turma_id: int
-    data_postagem: date = Field(default_factory=date.today)
-
-class ContaContabil(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    codigo: str
-    nome: str
-    tipo: str
-    natureza: str
-
-class Lancamento(SQLModel, table=True):
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    data_lancamento: date
-    conta_debito: str
-    conta_credito: str
-    valor: float
-    historico: str
-    usuario_id: int = Field(foreign_key="usuario.id")
-
-def get_session(): return Session(engine)
+# Os modelos foram movidos para src/models/ para melhor organização
+# Estes imports usam os modelos centralizados do pacote src
 
 def carregar_dados_padrao(session):
     if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
@@ -553,7 +501,20 @@ def carregar_dados_padrao(session):
         ]
 
         for c, n, t, nat in contas:
-            session.add(ContaContabil(codigo=c, nome=n, tipo=t, natureza=nat))
+            # Calcula o nível baseado no código (quantos pontos + 1)
+            nivel = c.count('.') + 1
+            # Determina se é analítica ou sintética
+            tipo_conta = "Analítica" if t == 'A' else "Sintética"
+            # Determina o grupo baseado no primeiro dígito do código
+            primeiro_digito = c.split('.')[0]
+            if primeiro_digito in ['1', '2']:
+                grupo = "Ativo" if primeiro_digito == '1' else "Passivo"
+            elif primeiro_digito in ['3', '4', '5', '6', '7']:
+                grupo = "Resultado"
+            else:
+                grupo = "Outros"
+            
+            session.add(ContaContabil(codigo=c, nome=n, tipo=tipo_conta, natureza=nat, nivel=nivel, grupo=grupo))
         session.commit()
 
 def inicializar_banco():
@@ -678,28 +639,19 @@ def logout():
     st.rerun()
 
 if "user" not in st.session_state or not st.session_state["user"]:
-    st.markdown("""
-    <style>
-        [data-testid="stAppViewContainer"] { background: linear-gradient(135deg, #e8f4f8 0%, #d4eaf4 50%, #c8e0ef 100%) !important; min-height: 100vh; }
-        [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-        .block-container { padding-top: 6vh !important; max-width: 480px !important; }
-        .login-card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,75,141,0.15); overflow: hidden; }
-        .login-hero { background: linear-gradient(160deg, #d4eaf4 0%, #e8f4f8 60%, #f0f8fc 100%); padding: 36px 40px; text-align: center; }
-        .field-label { color: #334155; font-size: 0.72em; font-weight: 700; text-transform: uppercase; margin: 14px 0 4px 0; }
-        .stTextInput>div>div>input { border-radius: 10px !important; border: none !important; height: 44px !important; background: #f8fafc !important; box-shadow: none !important; outline: none !important; }
-        .stFormSubmitButton>button { height: 48px !important; border-radius: 10px !important; background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important; color: white !important; font-weight: 700 !important; font-size: 15px !important; border: none !important; box-shadow: none !important; }
-    </style>
-    """, unsafe_allow_html=True)
-    logo_b64 = get_image_base64("assets/logo.png")
-    img_tag = f"<img src='data:image/png;base64,{logo_b64}' style='width:140px;'>" if logo_b64 else "<div style='font-size:5rem;'>🦅</div>"
-    st.markdown(f"<div class='login-card'><div class='login-hero'>{img_tag}</div>", unsafe_allow_html=True)
-    with st.form("login_form", clear_on_submit=True):
-        st.markdown("<span class='field-label'>👤 Login de acesso</span>", unsafe_allow_html=True)
-        st.text_input("u", key="u_log", placeholder="Digite seu usuário", label_visibility="collapsed")
-        st.text_input("p", type="password", key="u_pass", placeholder="Digite sua senha", label_visibility="collapsed")
-        if st.form_submit_button("ENTRAR", type="primary"):
-            login()
-    st.markdown("""<div style='text-align:center;margin-top:20px;color:#94a3b8;'>Plataforma para o ensino da contabilidade<br>Todos os direitos reservados · Versão 5.0</div>""", unsafe_allow_html=True)
+    # Renderiza a Landing Page ao invés do login simples
+    render_landing_page()
+    
+    # Mostra o formulário de login na sidebar
+    with st.sidebar:
+        st.markdown("### 🔐 Acesso ao Sistema")
+        with st.form("login_form", clear_on_submit=True):
+            st.text_input("Usuário", key="u_log", placeholder="Digite seu usuário")
+            st.text_input("Senha", type="password", key="u_pass", placeholder="Digite sua senha")
+            if st.form_submit_button("ENTRAR", type="primary", use_container_width=True):
+                login()
+        st.markdown("---")
+        st.info("💡 **Dica:** Use os usuários padrão:\n- admin\n- professor\n- aluno\n\nSenha: `123`")
     st.stop()
 
 session = get_session()

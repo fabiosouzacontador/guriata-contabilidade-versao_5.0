@@ -1,92 +1,76 @@
-from sqlmodel import SQLModel, Session, create_engine, select, delete
-import streamlit as st
-# Ajuste de importação para garantir que funcione em diferentes estruturas de pasta
-try:
-    from src.models.account_model import ContaContabil
-    from src.models.lancamento_model import Lancamento 
-    from src.models.usuario_model import Usuario 
-except ImportError:
-    from models.account_model import ContaContabil
-    from models.lancamento_model import Lancamento 
-    from models.usuario_model import Usuario
-import os
+"""
+Módulo de banco de dados
+Gerencia conexões, sessões e inicialização do banco de dados
+"""
 
-# --- CONEXÃO INTELIGENTE (LOCAL OU NUVEM) ---
-try:
-    # Tenta pegar a conexão da Nuvem (Streamlit Cloud)
-    database_url = st.secrets["DATABASE_URL"]
-    
-    # Ajuste para PostgreSQL se necessário (O Streamlit exige postgresql://)
-    if database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql://", 1)
-        
-    # print("☁️ Conectado na Nuvem!") # Debug silencioso
+from sqlmodel import SQLModel, Session, select, delete
+from src.config import engine, get_session, get_default_password
+from src.models.account_model import ContaContabil
+from src.models.lancamento_model import Lancamento 
+from src.models.usuario_model import Usuario
+from src.utils import hash_senha
 
-except (FileNotFoundError, KeyError):
-    # Se não achar segredo (PC local), usa o arquivo SQLite
-    # Garante que o pasta data exista
-    if not os.path.exists("data"):
-        os.makedirs("data")
-        
-    database_url = f"sqlite:///data/contabilidade.db"
-    # print("💻 Conectado Localmente")
-
-# thread_check_same_thread=False é necessário para SQLite com Streamlit
-connect_args = {"check_same_thread": False} if "sqlite" in database_url else {}
-engine = create_engine(database_url, connect_args=connect_args)
-
-# --- FUNÇÕES DO BANCO ---
-def get_session():
-    return Session(engine)
 
 def create_db_and_tables():
+    """Cria todas as tabelas no banco de dados"""
     SQLModel.metadata.create_all(engine)
 
+
 def salvar_lancamento(lancamento: Lancamento):
+    """Salva um lançamento no banco de dados"""
     with Session(engine) as session:
         session.add(lancamento)
         session.commit()
         session.refresh(lancamento)
     return lancamento
 
-def excluir_lancamento_individual(lancamento_id):
+
+def excluir_lancamento_individual(lancamento_id: int):
     """Apaga apenas um lançamento específico pelo ID"""
     with Session(engine) as session:
         statement = delete(Lancamento).where(Lancamento.id == lancamento_id)
         session.exec(statement)
         session.commit()
 
+
 def limpar_todos_lancamentos():
+    """Remove todos os lançamentos do banco"""
     with Session(engine) as session:
         statement = delete(Lancamento)
         session.exec(statement)
         session.commit()
 
-def limpar_lancamentos_por_usuario(user_id):
+
+def limpar_lancamentos_por_usuario(user_id: int):
+    """Remove todos os lançamentos de um usuário específico"""
     with Session(engine) as session:
         statement = delete(Lancamento).where(Lancamento.usuario_id == user_id)
         session.exec(statement)
         session.commit()
 
-def deletar_usuario_por_id(user_id):
+
+def deletar_usuario_por_id(user_id: int):
+    """Deleta um usuário e seus lançamentos associados"""
     with Session(engine) as session:
-        # Primeiro apaga os lançamentos desse usuário para não dar erro de chave estrangeira
         session.exec(delete(Lancamento).where(Lancamento.usuario_id == user_id))
-        # Depois apaga o usuário
         session.exec(delete(Usuario).where(Usuario.id == user_id))
         session.commit()
 
-def alterar_senha_usuario(user_id, nova_senha):
+
+def alterar_senha_usuario(user_id: int, nova_senha: str) -> bool:
+    """Altera a senha de um usuário"""
     with Session(engine) as session:
         usuario = session.get(Usuario, user_id)
         if usuario:
-            usuario.senha = nova_senha
+            usuario.senha = hash_senha(nova_senha)
             session.add(usuario)
             session.commit()
             return True
     return False
 
+
 def populate_initial_data():
+    """Popula o banco com dados iniciais (plano de contas e usuários padrão)"""
     with Session(engine) as session:
         # 1. PLANO DE CONTAS EXPANDIDO
         if not session.exec(select(ContaContabil)).first():
@@ -115,7 +99,7 @@ def populate_initial_data():
                 ContaContabil(codigo="1.2.3.01", nome="Móveis e Utensílios", nivel=4, tipo="Analítica", natureza="Devedora", grupo="Ativo"),
                 ContaContabil(codigo="1.2.3.02", nome="Veículos", nivel=4, tipo="Analítica", natureza="Devedora", grupo="Ativo"),
                 ContaContabil(codigo="1.2.3.03", nome="Máquinas e Equipamentos", nivel=4, tipo="Analítica", natureza="Devedora", grupo="Ativo"),
-                ContaContabil(codigo="1.2.3.04", nome="(-) Depreciação Acumulada", nivel=4, tipo="Analítica", natureza="Credora", grupo="Ativo"), # Conta Retificadora
+                ContaContabil(codigo="1.2.3.04", nome="(-) Depreciação Acumulada", nivel=4, tipo="Analítica", natureza="Credora", grupo="Ativo"),
                 ContaContabil(codigo="1.2.4", nome="Intangível", nivel=3, tipo="Sintética", natureza="Devedora", grupo="Ativo"),
                 ContaContabil(codigo="1.2.4.01", nome="Marcas e Patentes", nivel=4, tipo="Analítica", natureza="Devedora", grupo="Ativo"),
                 
@@ -139,7 +123,7 @@ def populate_initial_data():
                 ContaContabil(codigo="2.3", nome="PATRIMÔNIO LÍQUIDO", nivel=2, tipo="Sintética", natureza="Credora", grupo="Patrimônio Líquido"),
                 ContaContabil(codigo="2.3.1", nome="Capital Social Realizado", nivel=3, tipo="Analítica", natureza="Credora", grupo="Patrimônio Líquido"),
                 ContaContabil(codigo="2.3.2", nome="Reservas de Lucros", nivel=3, tipo="Sintética", natureza="Credora", grupo="Patrimônio Líquido"),
-                ContaContabil(codigo="2.3.3", nome="Lucros ou Prejuízos Acumulados", nivel=3, tipo="Analítica", natureza="Credora", grupo="Patrimônio Líquido"), # Pode ser devedora se prejuízo
+                ContaContabil(codigo="2.3.3", nome="Lucros ou Prejuízos Acumulados", nivel=3, tipo="Analítica", natureza="Credora", grupo="Patrimônio Líquido"),
 
                 # --- RESULTADO (DRE) ---
                 ContaContabil(codigo="3", nome="RECEITAS", nivel=1, tipo="Sintética", natureza="Credora", grupo="Resultado"),
@@ -181,12 +165,29 @@ def populate_initial_data():
             session.add_all(contas_iniciais)
             session.commit()
 
-        # 2. USUÁRIOS PADRÃO
+        # 2. USUÁRIOS PADRÃO (com senhas hasheadas)
         if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
             print("Criando usuários padrão...")
-            admin = Usuario(username="admin", senha="123", nome="Administrador", perfil="admin")
-            prof = Usuario(username="professor", senha="123", nome="Professor Padrão", perfil="professor")
-            aluno = Usuario(username="aluno", senha="123", nome="Aluno Exemplo", perfil="aluno")
+            senha_padrao = get_default_password()
+            
+            admin = Usuario(
+                username="admin",
+                senha=hash_senha(senha_padrao),
+                nome="Administrador",
+                perfil="admin"
+            )
+            prof = Usuario(
+                username="professor",
+                senha=hash_senha(senha_padrao),
+                nome="Professor Padrão",
+                perfil="professor"
+            )
+            aluno = Usuario(
+                username="aluno",
+                senha=hash_senha(senha_padrao),
+                nome="Aluno Exemplo",
+                perfil="aluno"
+            )
             session.add(admin)
             session.add(prof)
             session.add(aluno)
