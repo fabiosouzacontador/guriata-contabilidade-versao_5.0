@@ -11,6 +11,8 @@ import warnings
 import time
 import bcrypt
 
+from src.views.landing_page import render_landing_page
+
 # ==============================================================================
 # 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
@@ -637,28 +639,19 @@ def logout():
     st.rerun()
 
 if "user" not in st.session_state or not st.session_state["user"]:
-    st.markdown("""
-    <style>
-        [data-testid="stAppViewContainer"] { background: linear-gradient(135deg, #e8f4f8 0%, #d4eaf4 50%, #c8e0ef 100%) !important; min-height: 100vh; }
-        [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-        .block-container { padding-top: 6vh !important; max-width: 480px !important; }
-        .login-card { background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,75,141,0.15); overflow: hidden; }
-        .login-hero { background: linear-gradient(160deg, #d4eaf4 0%, #e8f4f8 60%, #f0f8fc 100%); padding: 36px 40px; text-align: center; }
-        .field-label { color: #334155; font-size: 0.72em; font-weight: 700; text-transform: uppercase; margin: 14px 0 4px 0; }
-        .stTextInput>div>div>input { border-radius: 10px !important; border: none !important; height: 44px !important; background: #f8fafc !important; box-shadow: none !important; outline: none !important; }
-        .stFormSubmitButton>button { height: 48px !important; border-radius: 10px !important; background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%) !important; color: white !important; font-weight: 700 !important; font-size: 15px !important; border: none !important; box-shadow: none !important; }
-    </style>
-    """, unsafe_allow_html=True)
-    logo_b64 = get_image_base64("assets/logo.png")
-    img_tag = f"<img src='data:image/png;base64,{logo_b64}' style='width:140px;'>" if logo_b64 else "<div style='font-size:5rem;'>🦅</div>"
-    st.markdown(f"<div class='login-card'><div class='login-hero'>{img_tag}</div>", unsafe_allow_html=True)
-    with st.form("login_form", clear_on_submit=True):
-        st.markdown("<span class='field-label'>👤 Login de acesso</span>", unsafe_allow_html=True)
-        st.text_input("u", key="u_log", placeholder="Digite seu usuário", label_visibility="collapsed")
-        st.text_input("p", type="password", key="u_pass", placeholder="Digite sua senha", label_visibility="collapsed")
-        if st.form_submit_button("ENTRAR", type="primary"):
-            login()
-    st.markdown("""<div style='text-align:center;margin-top:20px;color:#94a3b8;'>Plataforma para o ensino da contabilidade<br>Todos os direitos reservados · Versão 5.0</div>""", unsafe_allow_html=True)
+    # Renderiza a Landing Page ao invés do login simples
+    render_landing_page()
+    
+    # Mostra o formulário de login na sidebar
+    with st.sidebar:
+        st.markdown("### 🔐 Acesso ao Sistema")
+        with st.form("login_form", clear_on_submit=True):
+            st.text_input("Usuário", key="u_log", placeholder="Digite seu usuário")
+            st.text_input("Senha", type="password", key="u_pass", placeholder="Digite sua senha")
+            if st.form_submit_button("ENTRAR", type="primary", use_container_width=True):
+                login()
+        st.markdown("---")
+        st.info("💡 **Dica:** Use os usuários padrão:\n- admin\n- professor\n- aluno\n\nSenha: `123`")
     st.stop()
 
 session = get_session()
