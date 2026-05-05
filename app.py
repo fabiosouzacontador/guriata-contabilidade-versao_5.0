@@ -10,17 +10,35 @@ from pathlib import Path
 import warnings
 import time
 import bcrypt
+import os
+from dotenv import load_dotenv
 
 # ==============================================================================
 # 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
 warnings.filterwarnings("ignore")
-st.set_page_config(
-    page_title="Guriatã",
-    layout="centered",
-    page_icon="assets/logo.png",
-    initial_sidebar_state="expanded"
-)
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
+
+# Verificar se deve mostrar landing page ou sistema
+show_landing = os.environ.get("SHOW_LANDING", "true").lower() == "true"
+
+# Configurar página apenas se não for landing page
+if not show_landing or st.query_params.get("page") == "sistema":
+    st.set_page_config(
+        page_title="Guriatã - Sistema",
+        layout="centered",
+        page_icon="assets/logo.png",
+        initial_sidebar_state="expanded"
+    )
+else:
+    st.set_page_config(
+        page_title="Guriatã - Plataforma de Ensino de Contabilidade",
+        layout="wide",
+        page_icon="🦅",
+        initial_sidebar_state="collapsed"
+    )
 
 def formatar_data_br(data):
     if data:
@@ -234,6 +252,379 @@ def get_image_base64(image_path):
     except:
         return None
 
+def mostrar_landing_page():
+    """Mostra a landing page com informações do sistema e botão de acesso"""
+    
+    # CSS personalizado para landing page
+    st.markdown("""
+    <style>
+        [data-testid="stAppViewContainer"] { 
+            background: linear-gradient(135deg, #004b8d 0%, #0066c0 50%, #0052a3 100%) !important; 
+            min-height: 100vh; 
+        }
+        [data-testid="stHeader"], [data-testid="stSidebar"], footer, .stDeployButton { display: none !important; }
+        .block-container { padding-top: 2rem !important; max-width: 1400px !important; }
+        
+        /* Hero Section */
+        .hero-section { 
+            text-align: center; 
+            padding: 60px 20px; 
+            color: white;
+        }
+        .hero-title { 
+            font-size: 4rem; 
+            font-weight: 800; 
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .hero-subtitle { 
+            font-size: 1.8rem; 
+            font-weight: 300; 
+            margin-bottom: 20px;
+            opacity: 0.95;
+        }
+        .hero-description { 
+            font-size: 1.2rem; 
+            max-width: 800px; 
+            line-height: 1.8; 
+            margin: 0 auto 40px;
+            opacity: 0.9;
+        }
+        
+        /* Stats */
+        .stats-container { 
+            display: flex; 
+            justify-content: center; 
+            gap: 30px; 
+            margin: 50px 0;
+            flex-wrap: wrap;
+        }
+        .stat-box { 
+            background: rgba(255,255,255,0.15); 
+            backdrop-filter: blur(10px);
+            padding: 30px 40px; 
+            border-radius: 15px; 
+            text-align: center;
+            min-width: 150px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .stat-number { 
+            font-size: 3rem; 
+            font-weight: 800; 
+            color: #f5a623;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .stat-label { 
+            font-size: 1rem; 
+            margin-top: 8px;
+            opacity: 0.9;
+        }
+        
+        /* CTA Button */
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #f5a623 0%, #ffb830 100%);
+            color: #004b8d !important;
+            padding: 18px 50px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 1.2rem;
+            margin: 30px 0;
+            box-shadow: 0 8px 30px rgba(245,166,35,0.4);
+            transition: all 0.3s ease;
+        }
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(245,166,35,0.5);
+        }
+        
+        /* Target Audience */
+        .audience-section {
+            background: white;
+            color: #333;
+            padding: 60px 40px;
+            border-radius: 20px;
+            margin: 60px 0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .audience-title {
+            color: #004b8d;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 700;
+        }
+        .audience-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+        }
+        .audience-card {
+            background: linear-gradient(135deg, #e8f4f8 0%, #d4eaf4 100%);
+            padding: 30px 20px;
+            border-radius: 15px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .audience-card:hover {
+            border-color: #f5a623;
+            transform: translateY(-5px);
+        }
+        .audience-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        .audience-name {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #004b8d;
+        }
+        
+        /* Features */
+        .features-section {
+            background: rgba(255,255,255,0.1);
+            padding: 50px 40px;
+            border-radius: 20px;
+            margin: 40px 0;
+        }
+        .features-title {
+            color: white;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 40px;
+            font-weight: 700;
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 20px 0;
+            font-size: 1.1rem;
+        }
+        .feature-check {
+            color: #4caf50;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        /* Pricing Preview */
+        .pricing-preview {
+            background: white;
+            color: #333;
+            padding: 60px 40px;
+            border-radius: 20px;
+            margin: 60px 0;
+        }
+        .pricing-title {
+            color: #004b8d;
+            font-size: 2.2rem;
+            text-align: center;
+            margin-bottom: 50px;
+            font-weight: 700;
+        }
+        
+        /* Footer */
+        .landing-footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255,255,255,0.8);
+            margin-top: 60px;
+        }
+        .sandbox-warning {
+            background: rgba(245,166,35,0.2);
+            border: 2px solid #f5a623;
+            padding: 15px 30px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Hero Section
+    st.markdown("""
+    <div class="hero-section">
+        <div class="hero-title">🦅 Guriatã</div>
+        <div class="hero-subtitle">Plataforma de Ensino de Contabilidade</div>
+        <div class="hero-description">
+            Aprenda contabilidade na prática com um ambiente completo e seguro. 
+            Lançamentos contábeis, razonetes, balancete, DRE e balanço patrimonial 
+            em uma única plataforma desenvolvida para universidades, escolas e professores.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Stats
+    st.markdown("""
+    <div class="stats-container">
+        <div class="stat-box">
+            <div class="stat-number">3</div>
+            <div class="stat-label">Perfis de Acesso</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-number">80+</div>
+            <div class="stat-label">Contas Contábeis</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-number">5</div>
+            <div class="stat-label">Relatórios</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-number">∞</div>
+            <div class="stat-label">Lançamentos</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Botão de acesso
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🚀 ACESSAR SISTEMA GRATUITAMENTE", type="primary", use_container_width=True, key="btn_acesso_landing"):
+            st.query_params["page"] = "sistema"
+            st.rerun()
+    
+    st.markdown("<div style='text-align:center;margin:20px 0;'><a href='#publico' style='color:white;text-decoration:none;font-size:0.95rem;'>↓ Conheça nosso público</a></div>", unsafe_allow_html=True)
+    
+    # Público Alvo
+    st.markdown("<a id='publico'></a>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="audience-section">
+        <div class="audience-title">🎯 Para Quem é o Guriatã?</div>
+        <div class="audience-grid">
+            <div class="audience-card">
+                <div class="audience-icon">🏛️</div>
+                <div class="audience-name">Universidades</div>
+                <p style="margin-top:10px;font-size:0.9rem;">Cursos de Ciências Contábeis que buscam prática real</p>
+            </div>
+            <div class="audience-card">
+                <div class="audience-icon">🏫</div>
+                <div class="audience-name">Escolas Técnicas</div>
+                <p style="margin-top:10px;font-size:0.9rem;">Ensino médio técnico em contabilidade</p>
+            </div>
+            <div class="audience-card">
+                <div class="audience-icon">👨‍🏫</div>
+                <div class="audience-name">Professores</div>
+                <p style="margin-top:10px;font-size:0.9rem;">Educadores que ensinam contabilidade</p>
+            </div>
+            <div class="audience-card">
+                <div class="audience-icon">📚</div>
+                <div class="audience-name">Alunos</div>
+                <p style="margin-top:10px;font-size:0.9rem;">Estudantes de todos os níveis</p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Funcionalidades
+    st.markdown("""
+    <div class="features-section">
+        <div class="features-title">✨ Funcionalidades Completas</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        st.markdown("""
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>Lançamentos Contábeis:</strong> Registre débitos e créditos com histórico</span></div>
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>Razonetes (T):</strong> Visualize movimentações por conta</span></div>
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>Balancete:</strong> Verifique saldo de todas as contas</span></div>
+        """, unsafe_allow_html=True)
+    with col_f2:
+        st.markdown("""
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>DRE:</strong> Demonstração do Resultado do Exercício</span></div>
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>Balanço Patrimonial:</strong> Ativo, Passivo e PL equilibrados</span></div>
+        <div class="feature-item"><span class="feature-check">✓</span><span><strong>Múltiplos Perfis:</strong> Admin, Professor e Aluno</span></div>
+        """, unsafe_allow_html=True)
+    
+    # Pricing Preview
+    st.markdown("""
+    <div class="pricing-preview">
+        <div class="pricing-title">💰 Planos Flexíveis para Cada Necessidade</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+    with col_p1:
+        st.markdown("""
+        <div style="background:#f8f9fa;padding:20px;border-radius:10px;text-align:center;">
+            <h4 style="color:#004b8d;margin:0;">Gratuito</h4>
+            <h2 style="color:#333;margin:10px 0;">R$ 0</h2>
+            <p style="font-size:0.85rem;color:#666;">Para estudantes</p>
+            <hr style="border:none;border-top:1px solid #ddd;margin:15px 0;">
+            <p style="font-size:0.8rem;">1 usuário<br>1 turma<br>Lançamentos ilimitados</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_p2:
+        st.markdown("""
+        <div style="background:linear-gradient(135deg,#004b8d,#0066c0);color:white;padding:20px;border-radius:10px;text-align:center;position:relative;">
+            <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#f5a623;color:#004b8d;padding:3px 10px;border-radius:10px;font-size:0.7rem;font-weight:bold;">POPULAR</div>
+            <h4 style="margin:0;">Professor</h4>
+            <h2 style="margin:10px 0;">R$ 49,90<span style="font-size:1rem;">/mês</span></h2>
+            <p style="font-size:0.85rem;opacity:0.9;">Para educadores</p>
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,0.3);margin:15px 0;">
+            <p style="font-size:0.8rem;">50 alunos<br>5 turmas<br>Relatórios avançados</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_p3:
+        st.markdown("""
+        <div style="background:#f8f9fa;padding:20px;border-radius:10px;text-align:center;">
+            <h4 style="color:#004b8d;margin:0;">Escola</h4>
+            <h2 style="color:#333;margin:10px 0;">R$ 299,90</h2>
+            <p style="font-size:0.85rem;color:#666;">Instituições</p>
+            <hr style="border:none;border-top:1px solid #ddd;margin:15px 0;">
+            <p style="font-size:0.8rem;">500 alunos<br>50 turmas<br>Suporte dedicado</p>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_p4:
+        st.markdown("""
+        <div style="background:#f8f9fa;padding:20px;border-radius:10px;text-align:center;">
+            <h4 style="color:#004b8d;margin:0;">Enterprise</h4>
+            <h2 style="color:#333;margin:10px 0;">R$ 999,90</h2>
+            <p style="font-size:0.85rem;color:#666;">Solução completa</p>
+            <hr style="border:none;border-top:1px solid #ddd;margin:15px 0;">
+            <p style="font-size:0.8rem;">Ilimitado<br>White-label<br>Gerente de conta</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Footer
+    st.markdown("""
+    <div class="landing-footer">
+        <p><strong>⚠️ AMBIENTE SANDBOX</strong></p>
+        <p>Este sistema é destinado exclusivamente para fins educacionais.</p>
+        <p>NÃO insira dados reais ou sensíveis. Em conformidade com a LGPD.</p>
+        <div class="sandbox-warning">🔒 Dados fictícios apenas · Versão 5.0</div>
+        <p style="margin-top:30px;font-size:0.85rem;">© 2024 Guriatã - Todos os direitos reservados · Desenvolvido com ❤️ para educação contábil no Brasil</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Esconder menu lateral e parar execução
+    st.stop()
+
+# Mostrar landing page se configurado
+if show_landing and st.query_params.get("page") != "sistema":
+    mostrar_landing_page()
+
+def formatar_data_br(data):
+    if data:
+        return data.strftime('%d/%m/%Y')
+    return ""
+
+def fmt_moeda(v):
+    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def hash_senha(senha: str) -> str:
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(senha.encode('utf-8'), salt).decode('utf-8')
+
+def verificar_senha(senha: str, senha_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8'))
+    except:
+        return False
+
 def slugify(s):
     safe = s.lower()
     replacements = {'ã': 'a', 'á': 'a', 'à': 'a', 'â': 'a', 'ä': 'a',
@@ -377,7 +768,14 @@ def gerar_html_impressao(menu, me, session):
 # ==============================================================================
 # 2. BANCO DE DADOS (NEON POSTGRESQL)
 # ==============================================================================
-DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
+import os
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente
+load_dotenv()
+
+# URL do banco de dados via variável de ambiente (NUNCA hardcoded no código)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/contabilidade.db")
 
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=10)
 
@@ -408,6 +806,12 @@ class Usuario(SQLModel, table=True):
     turma_id: Optional[int] = Field(default=None)
     xp: int = Field(default=0)
     data_criacao: date = Field(default_factory=date.today)
+    # Campos para monetização
+    plano_id: Optional[int] = Field(default=None, foreign_key="plano.id")
+    assinatura_ativa: bool = Field(default=False)
+    data_assinatura_inicio: Optional[date] = Field(default=None)
+    data_assinatura_fim: Optional[date] = Field(default=None)
+    stripe_customer_id: Optional[str] = Field(default=None)
 
 class Aula(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -438,9 +842,87 @@ class Lancamento(SQLModel, table=True):
     historico: str
     usuario_id: int = Field(foreign_key="usuario.id")
 
+# ==============================================================================
+# MODELOS DE MONETIZAÇÃO
+# ==============================================================================
+class Plano(SQLModel, table=True):
+    """Planos de assinatura da plataforma"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str  # "Gratuito", "Professor", "Escola", "Enterprise"
+    descricao: str
+    preco_mensal: float  # 0 para gratuito
+    max_usuarios: int = 1  # Número máximo de usuários (alunos)
+    max_turmas: int = 1
+    recursos: str  # JSON ou texto com lista de recursos inclusos
+    stripe_price_id: Optional[str] = Field(default=None)  # ID do preço no Stripe
+    ativo: bool = Field(default=True)
+
+class Assinatura(SQLModel, table=True):
+    """Registro de assinaturas dos usuários"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: int = Field(foreign_key="usuario.id")
+    plano_id: int = Field(foreign_key="plano.id")
+    data_inicio: date
+    data_fim: Optional[date] = None
+    status: str = "ativa"  # ativa, cancelada, expirada, pendente
+    stripe_subscription_id: Optional[str] = Field(default=None)
+    stripe_customer_id: Optional[str] = Field(default=None)
+    ultimo_pagamento: Optional[date] = Field(default=None)
+    proximo_cobranca: Optional[date] = Field(default=None)
+
 def get_session(): return Session(engine)
 
 def carregar_dados_padrao(session):
+    # Criar planos de assinatura se não existirem
+    if not session.exec(select(Plano)).first():
+        print("Criando planos de assinatura...")
+        planos = [
+            Plano(
+                nome="Gratuito",
+                descricao="Plano básico para estudantes individuais",
+                preco_mensal=0,
+                max_usuarios=1,
+                max_turmas=1,
+                recursos='["Lançamentos ilimitados", "Balancete", "Razonetes", "Suporte por e-mail"]',
+                ativo=True
+            ),
+            Plano(
+                nome="Professor",
+                descricao="Para professores que desejam gerenciar múltiplas turmas",
+                preco_mensal=49.90,
+                max_usuarios=50,
+                max_turmas=5,
+                recursos='["Tudo do plano Gratuito", "Até 50 alunos", "Até 5 turmas", "Relatórios avançados", "Exportação Excel/PDF", "Suporte prioritário"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            ),
+            Plano(
+                nome="Escola",
+                descricao="Para escolas e instituições de ensino",
+                preco_mensal=299.90,
+                max_usuarios=500,
+                max_turmas=50,
+                recursos='["Tudo do plano Professor", "Até 500 alunos", "Até 50 turmas", "Múltiplos professores", "Dashboard administrativo", "API de integração", "Suporte dedicado"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            ),
+            Plano(
+                nome="Enterprise",
+                descricao="Solução completa para grandes instituições",
+                preco_mensal=999.90,
+                max_usuarios=-1,  # Ilimitado
+                max_turmas=-1,  # Ilimitado
+                recursos='["Tudo do plano Escola", "Usuários ilimitados", "Turmas ilimitadas", "White-label", "Treinamento personalizado", "SLA garantido", "Gerente de conta"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            )
+        ]
+        for plano in planos:
+            session.add(plano)
+        session.commit()
+    
     if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
         esc = session.exec(select(Escola).where(Escola.nome == "Sede Administrativa")).first()
         if not esc:

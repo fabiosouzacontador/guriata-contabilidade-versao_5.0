@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guriatã - Plataforma de Contabilidade</title>
+    <title>Guriatã - Plataforma de Ensino de Contabilidade</title>
     <style>
+        * { box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 0;
             background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%);
@@ -21,35 +22,183 @@
             justify-content: center;
             align-items: center;
         }
-        h1 { font-size: 3rem; margin-bottom: 20px; }
+        h1 { font-size: 3rem; margin-bottom: 10px; }
+        h2 { font-size: 1.8rem; margin-bottom: 20px; font-weight: 400; }
+        p { font-size: 1.1rem; max-width: 600px; line-height: 1.6; }
         .btn {
             display: inline-block;
             background: #f5a623;
             color: #004b8d;
-            padding: 15px 30px;
+            padding: 15px 35px;
             border-radius: 10px;
             text-decoration: none;
             font-weight: bold;
-            margin-top: 20px;
+            margin-top: 25px;
+            transition: all 0.3s ease;
         }
-        .btn:hover { background: #ffb830; transform: scale(1.05); }
+        .btn:hover { background: #ffb830; transform: scale(1.05); box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
         .stats { display: flex; gap: 40px; margin-top: 50px; flex-wrap: wrap; justify-content: center; }
-        .stat { text-align: center; }
-        .stat-num { font-size: 2rem; font-weight: bold; color: #f5a623; }
+        .stat { text-align: center; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; min-width: 120px; }
+        .stat-num { font-size: 2.5rem; font-weight: bold; color: #f5a623; }
+        
+        /* Pricing Section */
+        .pricing-section {
+            background: white;
+            color: #333;
+            padding: 80px 20px;
+            width: 100%;
+            margin-top: 60px;
+        }
+        .pricing-section h2 { color: #004b8d; font-size: 2.5rem; margin-bottom: 50px; }
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .pricing-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .pricing-card:hover { transform: translateY(-10px); }
+        .pricing-card.destaque { border-color: #f5a623; position: relative; }
+        .pricing-card.destaque::before {
+            content: "MAIS POPULAR";
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f5a623;
+            color: #004b8d;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .plano-nome { font-size: 1.5rem; color: #004b8d; margin-bottom: 10px; }
+        .plano-preco { font-size: 2.5rem; font-weight: bold; color: #333; margin-bottom: 5px; }
+        .plano-preco span { font-size: 1rem; color: #666; }
+        .plano-desc { color: #666; margin-bottom: 20px; font-size: 0.95rem; }
+        .plano-recursos { list-style: none; padding: 0; text-align: left; }
+        .plano-recursos li { padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+        .plano-recursos li:before { content: "✓ "; color: #27ae60; font-weight: bold; }
+        .btn-plano {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-top: 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        .btn-gratis { background: #e0e0e0; color: #333; }
+        .btn-gratis:hover { background: #d0d0d0; }
+        .btn-pago { background: linear-gradient(135deg, #004b8d 0%, #0066c0 100%); color: white; }
+        .btn-pago:hover { transform: scale(1.05); box-shadow: 0 5px 15px rgba(0,75,141,0.3); }
+        
+        footer { margin-top: 60px; padding: 30px; background: rgba(0,0,0,0.2); width: 100%; }
+        footer p { font-size: 0.9rem; margin: 5px 0; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🦅 Guriatã</h1>
         <h2>Plataforma de Ensino de Contabilidade</h2>
-        <p>Aprenda contabilidade na prática com um ambiente completo e seguro.</p>
+        <p>Aprenda contabilidade na prática com um ambiente completo e seguro. Lançamentos, razonetes, balancete, DRE e balanço patrimonial em uma única plataforma.</p>
         <div class="stats">
             <div class="stat"><div class="stat-num">3</div><div>Perfis</div></div>
             <div class="stat"><div class="stat-num">80+</div><div>Contas</div></div>
             <div class="stat"><div class="stat-num">5</div><div>Relatórios</div></div>
+            <div class="stat"><div class="stat-num">∞</div><div>Lançamentos</div></div>
         </div>
-        <a href="/app" class="btn">🚀 Acessar Sistema</a>
-        <p style="margin-top: 40px; font-size: 0.8rem;">Ambiente sandbox - Apenas dados fictícios</p>
+        <a href="/app" class="btn">🚀 Acessar Sistema Gratuitamente</a>
+        <p style="margin-top: 30px; font-size: 0.85rem; opacity: 0.9;">Ambiente sandbox - Apenas dados fictícios para fins educacionais</p>
+    </div>
+
+    <!-- Pricing Section -->
+    <div class="pricing-section">
+        <h2>Escolha o Plano Ideal</h2>
+        <div class="pricing-grid">
+            <!-- Plano Gratuito -->
+            <div class="pricing-card">
+                <div class="plano-nome">Gratuito</div>
+                <div class="plano-preco">R$ 0<span>/mês</span></div>
+                <div class="plano-desc">Para estudantes individuais</div>
+                <ul class="plano-recursos">
+                    <li>1 usuário (você)</li>
+                    <li>1 turma</li>
+                    <li>Lançamentos ilimitados</li>
+                    <li>Balancete e Razonetes</li>
+                    <li>Suporte por e-mail</li>
+                </ul>
+                <a href="/app" class="btn-plano btn-gratis">Começar Grátis</a>
+            </div>
+
+            <!-- Plano Professor -->
+            <div class="pricing-card destaque">
+                <div class="plano-nome">Professor</div>
+                <div class="plano-preco">R$ 49,90<span>/mês</span></div>
+                <div class="plano-desc">Para professores e tutores</div>
+                <ul class="plano-recursos">
+                    <li>Até 50 alunos</li>
+                    <li>Até 5 turmas</li>
+                    <li>Tudo do plano Gratuito</li>
+                    <li>Relatórios avançados</li>
+                    <li>Exportação Excel/PDF</li>
+                    <li>Suporte prioritário</li>
+                </ul>
+                <a href="/app?upgrade=professor" class="btn-plano btn-pago">Assinar Agora</a>
+            </div>
+
+            <!-- Plano Escola -->
+            <div class="pricing-card">
+                <div class="plano-nome">Escola</div>
+                <div class="plano-preco">R$ 299,90<span>/mês</span></div>
+                <div class="plano-desc">Para instituições de ensino</div>
+                <ul class="plano-recursos">
+                    <li>Até 500 alunos</li>
+                    <li>Até 50 turmas</li>
+                    <li>Múltiplos professores</li>
+                    <li>Dashboard administrativo</li>
+                    <li>API de integração</li>
+                    <li>Suporte dedicado</li>
+                </ul>
+                <a href="/app?upgrade=escola" class="btn-plano btn-pago">Falar com Vendas</a>
+            </div>
+
+            <!-- Plano Enterprise -->
+            <div class="pricing-card">
+                <div class="plano-nome">Enterprise</div>
+                <div class="plano-preco">R$ 999,90<span>/mês</span></div>
+                <div class="plano-desc">Solução completa</div>
+                <ul class="plano-recursos">
+                    <li>Usuários ilimitados</li>
+                    <li>Turmas ilimitadas</li>
+                    <li>White-label</li>
+                    <li>Treinamento personalizado</li>
+                    <li>SLA garantido</li>
+                    <li>Gerente de conta</li>
+                </ul>
+                <a href="/app?upgrade=enterprise" class="btn-plano btn-pago">Contato Enterprise</a>
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2024 Guriatã - Todos os direitos reservados</p>
+            <p>Desenvolvido com ❤️ para educação contábil no Brasil</p>
+            <p style="margin-top: 15px;">
+                <a href="#" style="color: #f5a623; text-decoration: none; margin: 0 10px;">Termos de Uso</a> | 
+                <a href="#" style="color: #f5a623; text-decoration: none; margin: 0 10px;">Privacidade</a> | 
+                <a href="#" style="color: #f5a623; text-decoration: none; margin: 0 10px;">Contato</a>
+            </p>
+        </footer>
     </div>
 </body>
 </html>
