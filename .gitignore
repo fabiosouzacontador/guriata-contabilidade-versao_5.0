@@ -1,6 +1,33 @@
-venv/
+```
+# Environment
+.env
+.env.local
+*.env.*
+
+# Dependencies
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg
+*.egg-info/
+*.so
+*.dylib
+*.dll
+
+# Logs
+*.log
+
+# OS generated files
 .DS_Store
-*.db
-*.sqlite
+Thumbs.db
+```

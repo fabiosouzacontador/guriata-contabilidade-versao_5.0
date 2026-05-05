@@ -377,7 +377,14 @@ def gerar_html_impressao(menu, me, session):
 # ==============================================================================
 # 2. BANCO DE DADOS (NEON POSTGRESQL)
 # ==============================================================================
-DATABASE_URL = "postgresql://neondb_owner:npg_1ZQMkSRiK6pc@ep-damp-recipe-an7lkxz4-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
+import os
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente
+load_dotenv()
+
+# URL do banco de dados via variável de ambiente (NUNCA hardcoded no código)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/contabilidade.db")
 
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True, pool_size=5, max_overflow=10)
 
@@ -408,6 +415,12 @@ class Usuario(SQLModel, table=True):
     turma_id: Optional[int] = Field(default=None)
     xp: int = Field(default=0)
     data_criacao: date = Field(default_factory=date.today)
+    # Campos para monetização
+    plano_id: Optional[int] = Field(default=None, foreign_key="plano.id")
+    assinatura_ativa: bool = Field(default=False)
+    data_assinatura_inicio: Optional[date] = Field(default=None)
+    data_assinatura_fim: Optional[date] = Field(default=None)
+    stripe_customer_id: Optional[str] = Field(default=None)
 
 class Aula(SQLModel, table=True):
     __table_args__ = {"extend_existing": True}
@@ -438,9 +451,87 @@ class Lancamento(SQLModel, table=True):
     historico: str
     usuario_id: int = Field(foreign_key="usuario.id")
 
+# ==============================================================================
+# MODELOS DE MONETIZAÇÃO
+# ==============================================================================
+class Plano(SQLModel, table=True):
+    """Planos de assinatura da plataforma"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    nome: str  # "Gratuito", "Professor", "Escola", "Enterprise"
+    descricao: str
+    preco_mensal: float  # 0 para gratuito
+    max_usuarios: int = 1  # Número máximo de usuários (alunos)
+    max_turmas: int = 1
+    recursos: str  # JSON ou texto com lista de recursos inclusos
+    stripe_price_id: Optional[str] = Field(default=None)  # ID do preço no Stripe
+    ativo: bool = Field(default=True)
+
+class Assinatura(SQLModel, table=True):
+    """Registro de assinaturas dos usuários"""
+    __table_args__ = {"extend_existing": True}
+    id: Optional[int] = Field(default=None, primary_key=True)
+    usuario_id: int = Field(foreign_key="usuario.id")
+    plano_id: int = Field(foreign_key="plano.id")
+    data_inicio: date
+    data_fim: Optional[date] = None
+    status: str = "ativa"  # ativa, cancelada, expirada, pendente
+    stripe_subscription_id: Optional[str] = Field(default=None)
+    stripe_customer_id: Optional[str] = Field(default=None)
+    ultimo_pagamento: Optional[date] = Field(default=None)
+    proximo_cobranca: Optional[date] = Field(default=None)
+
 def get_session(): return Session(engine)
 
 def carregar_dados_padrao(session):
+    # Criar planos de assinatura se não existirem
+    if not session.exec(select(Plano)).first():
+        print("Criando planos de assinatura...")
+        planos = [
+            Plano(
+                nome="Gratuito",
+                descricao="Plano básico para estudantes individuais",
+                preco_mensal=0,
+                max_usuarios=1,
+                max_turmas=1,
+                recursos='["Lançamentos ilimitados", "Balancete", "Razonetes", "Suporte por e-mail"]',
+                ativo=True
+            ),
+            Plano(
+                nome="Professor",
+                descricao="Para professores que desejam gerenciar múltiplas turmas",
+                preco_mensal=49.90,
+                max_usuarios=50,
+                max_turmas=5,
+                recursos='["Tudo do plano Gratuito", "Até 50 alunos", "Até 5 turmas", "Relatórios avançados", "Exportação Excel/PDF", "Suporte prioritário"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            ),
+            Plano(
+                nome="Escola",
+                descricao="Para escolas e instituições de ensino",
+                preco_mensal=299.90,
+                max_usuarios=500,
+                max_turmas=50,
+                recursos='["Tudo do plano Professor", "Até 500 alunos", "Até 50 turmas", "Múltiplos professores", "Dashboard administrativo", "API de integração", "Suporte dedicado"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            ),
+            Plano(
+                nome="Enterprise",
+                descricao="Solução completa para grandes instituições",
+                preco_mensal=999.90,
+                max_usuarios=-1,  # Ilimitado
+                max_turmas=-1,  # Ilimitado
+                recursos='["Tudo do plano Escola", "Usuários ilimitados", "Turmas ilimitadas", "White-label", "Treinamento personalizado", "SLA garantido", "Gerente de conta"]',
+                stripe_price_id="",  # Preencher com ID do Stripe
+                ativo=True
+            )
+        ]
+        for plano in planos:
+            session.add(plano)
+        session.commit()
+    
     if not session.exec(select(Usuario).where(Usuario.username == "admin")).first():
         esc = session.exec(select(Escola).where(Escola.nome == "Sede Administrativa")).first()
         if not esc:
