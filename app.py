@@ -11,11 +11,15 @@ import warnings
 import time
 import bcrypt
 import os
+from dotenv import load_dotenv
 
 # ==============================================================================
 # 1. CONFIGURAÇÕES & DESIGN
 # ==============================================================================
 warnings.filterwarnings("ignore")
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
 
 # Verificar se deve mostrar landing page ou sistema
 show_landing = os.environ.get("SHOW_LANDING", "true").lower() == "true"
